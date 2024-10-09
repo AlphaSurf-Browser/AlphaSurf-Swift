@@ -1,239 +1,282 @@
 #include <gtk/gtk.h>
 #include <webkit2/webkit2.h>
-#include <iostream>
-#include <string>
-#include <ctime>
 #include <vector>
+#include <string>
+#include <fstream>
+#include <iostream>
 
-// Struct to represent a tab
+const char* START_PAGE_HTML = R"(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to AlphaSurf</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            color: #333;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #007acc;
+        }
+        input[type="text"] {
+            width: 60%;
+            padding: 10px;
+            margin: 20px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #search-button {
+            padding: 10px 15px;
+            background-color: #007acc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #search-button:hover {
+            background-color: #005f99;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to AlphaSurf</h1>
+    <input type="text" id="search-query" placeholder="Search...">
+    <button id="search-button">Search</button>
+    <p>Current time: <span id="clock"></span></p>
+    <script>
+        document.getElementById('search-button').onclick = function() {
+            const query = document.getElementById('search-query').value;
+            if (query) {
+                window.location.href = 'alpha://search?q=' + encodeURIComponent(query);
+            }
+        };
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').textContent = now.toLocaleTimeString();
+        }
+        setInterval(updateClock, 1000);
+        updateClock(); // Initial call
+    </script>
+</body>
+</html>
+)";
+
+const char* SETTINGS_PAGE_HTML = R"(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - AlphaSurf</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            color: #333;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #007acc;
+        }
+        label {
+            display: block;
+            margin: 10px 0;
+        }
+        input[type="text"], input[type="checkbox"] {
+            margin: 5px 0;
+        }
+        input[type="submit"] {
+            padding: 10px 15px;
+            background-color: #007acc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        input[type="submit"]:hover {
+            background-color: #005f99;
+        }
+    </style>
+</head>
+<body>
+    <h1>Settings</h1>
+    <form id="settings-form">
+        <label for="homepage">Set Homepage:</label>
+        <input type="text" id="homepage" placeholder="Enter URL">
+        <label for="search-engine">Search Engine URL:</label>
+        <input type="text" id="search-engine" placeholder="Enter search engine URL">
+        <input type="submit" value="Save Settings">
+    </form>
+    <script>
+        const form = document.getElementById('settings-form');
+        form.onsubmit = function(event) {
+            event.preventDefault();
+            const homepage = document.getElementById('homepage').value;
+            const searchEngine = document.getElementById('search-engine').value;
+            window.localStorage.setItem('homepage', homepage);
+            window.localStorage.setItem('searchEngine', searchEngine);
+            alert('Settings saved!');
+        };
+
+        // Load existing settings
+        document.getElementById('homepage').value = window.localStorage.getItem('homepage') || '';
+        document.getElementById('search-engine').value = window.localStorage.getItem('searchEngine') || '';
+    </script>
+</body>
+</html>
+)";
+
 struct Tab {
-    std::string url;
-    bool is_secure; // Indicates whether the tab is secure (https)
+    WebKitWebView* web_view;
+    GtkWidget* label;
 };
 
-// Global variables
 std::vector<Tab> tabs;
-size_t current_tab_index = 0;
 
-// Function to get the current time in a formatted string
-std::string getCurrentTime() {
-    time_t now = time(0);
-    struct tm* timeinfo = localtime(&now);
-    char buffer[80];
-    strftime(buffer, 80, "%Y-%m-%d %H:%M:%S", timeinfo);
-    return std::string(buffer);
+std::string load_search_engine() {
+    std::ifstream infile("settings.txt");
+    std::string search_engine;
+    if (infile.good()) {
+        std::getline(infile, search_engine);
+    }
+    return search_engine.empty() ? "https://duckduckgo.com/?q=%s" : search_engine; // Default to DuckDuckGo
 }
 
-// Function to create the start page HTML
-std::string getStartPageHTML() {
-    return R"(
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    background-color: #f5f5f5;
-                    margin: 0;
-                    padding: 20px;
-                    text-align: center;
-                }
-                h1 {
-                    color: #007bff;
-                }
-                #searchbar {
-                    padding: 10px;
-                    width: 80%;
-                    max-width: 600px;
-                    border: 1px solid #007bff;
-                    border-radius: 5px;
-                    margin-bottom: 20px;
-                    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-                }
-                #clock {
-                    font-size: 1.2em;
-                    margin-top: 10px;
-                    color: #555;
-                }
-            </style>
-        </head>
-        <body>
-            <h1>Welcome to AlphaSurf</h1>
-            <input id="searchbar" type="text" placeholder="Search DuckDuckGo...">
-            <div id="clock">Time: )" + getCurrentTime() + R"(</div>
-
-            <script>
-                document.getElementById('searchbar').addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        const query = this.value;
-                        if (query) {
-                            window.location.href = 'https://duckduckgo.com/?q=' + encodeURIComponent(query);
-                        }
-                    }
-                });
-            </script>
-        </body>
-        </html>
-    )";
+void save_settings(const std::string& homepage, const std::string& search_engine) {
+    std::ofstream outfile("settings.txt");
+    if (outfile.is_open()) {
+        outfile << homepage << "\n" << search_engine << std::endl;
+    }
 }
 
-// Function to get the HTML for the no internet page
-std::string getNoInternetPageHTML() {
-    return R"(
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    text-align: center;
-                    padding: 50px;
-                }
-                h1 {
-                    color: red;
-                }
-            </style>
-        </head>
-        <body>
-            <h1>No Internet</h1>
-            <p>Please check your connection and try again.</p>
-        </body>
-        </html>
-    )";
+void load_url(WebKitWebView* web_view, const gchar* url) {
+    webkit_web_view_load_uri(web_view, url);
 }
 
-// Function to get the HTML for the settings page
-std::string getSettingsPageHTML() {
-    return R"(
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    text-align: center;
-                    padding: 50px;
-                }
-            </style>
-        </head>
-        <body>
-            <h1>Settings - AlphaSurf</h1>
-            <p>Here you can customize your browser settings.</p>
-            <button onclick="window.close()">Close Settings</button>
-        </body>
-        </html>
-    )";
+void load_html(WebKitWebView* web_view, const char* html) {
+    webkit_web_view_load_html(web_view, html, nullptr);
 }
 
-// Function to load URL and manage tabs
-void load_url(WebKitWebView* web_view, const std::string& url) {
-    if (url == "alpha://start") {
-        webkit_web_view_load_html(web_view, getStartPageHTML().c_str(), nullptr);
-    } else if (url == "alpha://settings") {
-        webkit_web_view_load_html(web_view, getSettingsPageHTML().c_str(), nullptr);
+void open_alpha_start(WebKitWebView* web_view) {
+    load_html(web_view, START_PAGE_HTML);
+}
+
+void on_refresh_button_clicked(WebKitWebView* web_view) {
+    const gchar* uri = webkit_web_view_get_uri(web_view);
+    if (uri) {
+        webkit_web_view_reload(web_view);
     } else {
-        webkit_web_view_load_uri(web_view, url.c_str());
-    }
-
-    // Update the current tab URL
-    if (current_tab_index < tabs.size()) {
-        tabs[current_tab_index].url = url;
-        tabs[current_tab_index].is_secure = url.substr(0, 5) == "https"; // Simple check for HTTPS
+        open_alpha_start(web_view);
     }
 }
 
-// Function to create the toolbar UI
-GtkWidget* create_toolbar(WebKitWebView* web_view) {
+void on_home_button_clicked(WebKitWebView* web_view) {
+    open_alpha_start(web_view);
+}
+
+void on_settings_button_clicked(GtkNotebook* notebook) {
+    WebKitWebView* settings_web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
+    load_html(settings_web_view, SETTINGS_PAGE_HTML);
+    
+    GtkWidget* settings_tab_label = gtk_label_new("Settings");
+    gtk_notebook_append_page(notebook, GTK_WIDGET(settings_web_view), settings_tab_label);
+    gtk_notebook_set_current_page(notebook, gtk_notebook_get_n_pages(notebook) - 1);
+}
+
+void on_new_tab_button_clicked(GtkNotebook* notebook) {
+    WebKitWebView* new_web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
+    open_alpha_start(new_web_view);  // Load start page in new tab
+
+    GtkWidget* tab_label = gtk_label_new("New Tab");
+    gtk_notebook_append_page(notebook, GTK_WIDGET(new_web_view), tab_label);
+    gtk_notebook_set_current_page(notebook, gtk_notebook_get_n_pages(notebook) - 1);
+    
+    // Connect the "destroy" signal to clean up the web view
+    g_signal_connect(new_web_view, "destroy", G_CALLBACK(gtk_widget_destroy), NULL);
+}
+
+void perform_search(WebKitWebView* web_view, const gchar* query) {
+    std::string search_engine = load_search_engine();
+    std::string search_url = search_engine;
+    size_t pos = search_url.find("%s");
+    if (pos != std::string::npos) {
+        search_url.replace(pos, 2, query);
+    }
+    load_url(web_view, search_url.c_str());
+}
+
+void on_uri_requested(WebKitWebView* web_view, WebKitWebFrame* frame, const gchar* uri) {
+    if (g_str_has_prefix(uri, "alpha://")) {
+        if (g_strcmp0(uri, "alpha://start") == 0) {
+            open_alpha_start(web_view);
+        } else if (g_strcmp0(uri, "alpha://settings") == 0) {
+            on_settings_button_clicked(GTK_NOTEBOOK(gtk_widget_get_parent(GTK_WIDGET(web_view))));
+        } else if (g_strcmp0(uri, "alpha://search") == 0) {
+            const gchar* query = g_strrstr(uri, "q=");
+            if (query) {
+                query += 2;  // Skip "q="
+                perform_search(web_view, query);
+            }
+        } else {
+            load_url(web_view, uri); // For any other alpha:// URL, treat it as a regular web request
+        }
+    } else {
+        load_url(web_view, uri); // Treat as a standard URL for non-alpha schemas
+    }
+}
+
+GtkWidget* create_toolbar(GtkNotebook* notebook) {
     GtkWidget* toolbar = gtk_toolbar_new();
-    gtk_toolbar_set_style(GTK_TOOLBAR(toolbar), GTK_TOOLBAR_ICONS);
-
-    // Back button
-    GtkToolItem* back_button = gtk_tool_button_new_from_stock(GTK_STOCK_GO_BACK);
-    g_signal_connect(back_button, "clicked", G_CALLBACK([](GtkToolItem* item) {
-        if (current_tab_index > 0) {
-            current_tab_index--;
-            load_url(web_view, tabs[current_tab_index].url);
-        }
-    }), NULL);
-    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), back_button, -1);
-
-    // Forward button
-    GtkToolItem* forward_button = gtk_tool_button_new_from_stock(GTK_STOCK_GO_FORWARD);
-    g_signal_connect(forward_button, "clicked", G_CALLBACK([](GtkToolItem* item) {
-        if (current_tab_index < tabs.size() - 1) {
-            current_tab_index++;
-            load_url(web_view, tabs[current_tab_index].url);
-        }
-    }), NULL);
-    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), forward_button, -1);
-
-    // Refresh button
-    GtkToolItem* refresh_button = gtk_tool_button_new_from_stock(GTK_STOCK_REFRESH);
-    g_signal_connect(refresh_button, "clicked", G_CALLBACK([](GtkToolItem* item) {
-        if (!tabs.empty()) {
-            load_url(web_view, tabs[current_tab_index].url);
-        }
-    }), NULL);
+    
+    GtkToolItem* refresh_button = gtk_tool_button_new(NULL, "Refresh");
+    g_signal_connect(refresh_button, "clicked", G_CALLBACK(on_refresh_button_clicked), nullptr);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), refresh_button, -1);
 
-    // Home button
-    GtkToolItem* home_button = gtk_tool_button_new_from_stock(GTK_STOCK_HOME);
-    g_signal_connect(home_button, "clicked", G_CALLBACK([](GtkToolItem* item) {
-        load_url(web_view, "alpha://start");
-    }), NULL);
+    GtkToolItem* home_button = gtk_tool_button_new(NULL, "Home");
+    g_signal_connect(home_button, "clicked", G_CALLBACK(on_home_button_clicked), nullptr);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), home_button, -1);
 
-    // New Tab button
+    GtkToolItem* settings_button = gtk_tool_button_new(NULL, "Settings");
+    g_signal_connect(settings_button, "clicked", G_CALLBACK(on_settings_button_clicked), notebook);
+    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), settings_button, -1);
+
     GtkToolItem* new_tab_button = gtk_tool_button_new(NULL, "New Tab");
-    g_signal_connect(new_tab_button, "clicked", G_CALLBACK([](GtkToolItem* item) {
-        Tab new_tab{"alpha://start", false};
-        tabs.push_back(new_tab);
-        current_tab_index = tabs.size() - 1; // Switch to the new tab
-        load_url(web_view, "alpha://start");
-    }), NULL);
+    g_signal_connect(new_tab_button, "clicked", G_CALLBACK(on_new_tab_button_clicked), notebook);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), new_tab_button, -1);
 
     return toolbar;
 }
 
-// Main function to start the GTK application and WebKit
 int main(int argc, char* argv[]) {
     gtk_init(&argc, &argv);
+    
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(window), "AlphaSurf Browser");
-    gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
-    gtk_window_set_resizable(GTK_WINDOW(window), TRUE);
-
-    // Create WebView
-    WebKitWebView* web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
-    gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(web_view));
-
-    // Create and add the toolbar
-    GtkWidget* toolbar = create_toolbar(web_view);
-    gtk_box_pack_start(GTK_BOX(gtk_vbox_new(FALSE, 0)), toolbar, FALSE, FALSE, 0);
-
-    // Load the start page by default
-    load_url(web_view, "alpha://start");
-
-    // Connect signals for window close
-    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), nullptr);
-
-    // Connect the load changed signal to handle URL changes and updates
-    g_signal_connect(web_view, "load-changed", G_CALLBACK([](WebKitWebView* web_view, WebKitLoadEvent load_event) {
-        if (load_event == WEBKIT_LOAD_COMMITTED) {
-            const gchar* uri = webkit_web_view_get_uri(web_view);
-            std::cout << "Current URL: " << uri << std::endl;
-        }
-    }), nullptr);
-
-    // Connect load error signal to show no internet page
-    g_signal_connect(web_view, "load-failed", G_CALLBACK([](WebKitWebView* web_view, WebKitLoadEvent load_event, const gchar* failing_uri, const gchar* error_domain, int error_code) {
-        std::cout << "Load failed: " << error_domain << ", " << error_code << std::endl;
-        webkit_web_view_load_html(web_view, getNoInternetPageHTML().c_str(), nullptr);
-    }), nullptr);
-
-    // Show the window
+    gtk_window_set_title(GTK_WINDOW(window), "AlphaSurf");
+    gtk_window_set_default_size(GTK_WINDOW(window), 1200, 800);
+    
+    GtkWidget* notebook = gtk_notebook_new();
+    gtk_container_add(GTK_CONTAINER(window), notebook);
+    
+    GtkWidget* toolbar = create_toolbar(GTK_NOTEBOOK(notebook));
+    gtk_box_pack_start(GTK_BOX(gtk_header_bar_new()), toolbar, FALSE, FALSE, 0);
+    
+    // Initial tab
+    on_new_tab_button_clicked(GTK_NOTEBOOK(notebook));
+    
+    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    g_signal_connect(window, "destroy", G_CALLBACK(gtk_widget_destroy), NULL);
+    
     gtk_widget_show_all(window);
     gtk_main();
+
     return 0;
 }
