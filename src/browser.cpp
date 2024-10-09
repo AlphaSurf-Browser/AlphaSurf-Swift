@@ -100,7 +100,8 @@ GtkWidget* create_toolbar(GtkNotebook* notebook, GtkEntry* url_entry) {
     gtk_tool_item_set_homogeneous(entry_item, TRUE);
     gtk_widget_show(entry_item);
     
-    gtk_container_add(GTK_CONTAINER(entry_item), url_entry);
+    // Cast url_entry to GtkWidget*
+    gtk_container_add(GTK_CONTAINER(entry_item), GTK_WIDGET(url_entry));
     
     // Connect the entry's activate signal
     g_signal_connect(url_entry, "activate", G_CALLBACK(perform_search), notebook);
@@ -126,8 +127,10 @@ int main(int argc, char** argv) {
     
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
     
+    // Cast url_entry to GtkWidget*
+    gtk_widget_show(GTK_WIDGET(url_entry));
+    
     gtk_widget_show_all(window);
-    gtk_widget_show(url_entry);
     
     gtk_main();
     return 0;
