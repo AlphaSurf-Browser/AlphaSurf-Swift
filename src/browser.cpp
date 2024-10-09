@@ -324,14 +324,14 @@ void installBrowser(const std::string& appName) {
 #endif
 
     // Create the installation directory if it doesn't exist
-    fs::create_directories(installDir);
+    std::filesystem::create_directories(installDir);
 
     // Move the application binary to the installation directory
-    fs::path currentPath = fs::current_path();
-    fs::path appPath = currentPath / appName;
+    std::filesystem::path currentPath = std::filesystem::current_path();
+    std::filesystem::path appPath = currentPath / appName;
 
-    if (fs::exists(appPath)) {
-        fs::rename(appPath, installDir / appName);
+    if (std::filesystem::exists(appPath)) {
+        std::filesystem::rename(appPath, installDir / appName);
     }
 
     // Save the settings to the installation directory
@@ -371,7 +371,7 @@ int main(int argc, char* argv[]) {
     gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(web_view));
 
     // Load the install page on first launch
-    if (!fs::exists("settings.conf")) {
+    if (!std::filesystem::exists("settings.conf")) {
         webkit_web_view_load_html(web_view, getInstallPageHTML().c_str(), nullptr);
         installBrowser("AlphaSurf");
     } else {
