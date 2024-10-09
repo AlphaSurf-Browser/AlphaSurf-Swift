@@ -222,8 +222,6 @@ void on_load_changed(WebKitWebView* web_view, WebKitLoadEvent load_event, GtkEnt
 }
 
 // Function prototype for the toolbar creation
-GtkWidget* create_toolbar(GtkNotebook* notebook, GtkEntry* url_entry);
-
 GtkWidget* create_toolbar(GtkNotebook* notebook, GtkEntry* url_entry) {
     GtkWidget* toolbar = gtk_toolbar_new();
 
@@ -247,14 +245,17 @@ GtkWidget* create_toolbar(GtkNotebook* notebook, GtkEntry* url_entry) {
     GtkToolItem* entry_item = gtk_tool_item_new();
     gtk_tool_item_set_expand(entry_item, TRUE);
     gtk_tool_item_set_homogeneous(entry_item, TRUE);
-    gtk_tool_item_set_widget(entry_item, url_entry);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), entry_item, -1);
+
+    // Add the URL entry to the tool item
+    gtk_container_add(GTK_CONTAINER(entry_item), url_entry);
 
     // Connect the entry's activate signal
     g_signal_connect(url_entry, "activate", G_CALLBACK(perform_search), nullptr);
 
     return toolbar;
 }
+
 
 int main(int argc, char* argv[]) {
     gtk_init(&argc, &argv);
