@@ -1,21 +1,23 @@
 cmake_minimum_required(VERSION 3.10)
-project(AlphaBrowser)
 
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Set the project name
+project(AlphaSurf)
 
-# Find the CEF package
-find_package(CEF REQUIRED)
+# Find required packages
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GTK REQUIRED gtk+-3.0)
+pkg_check_modules(WEBKIT REQUIRED webkit2gtk-4.0)
+
+# Include directories
+include_directories(${GTK_INCLUDE_DIRS} ${WEBKIT_INCLUDE_DIRS})
 
 # Specify the source files
 set(SOURCES
-    src/browser.cpp
+    browser.cpp
 )
 
 # Create the executable
-add_executable(AlphaBrowser ${SOURCES})
+add_executable(AlphaSurf ${SOURCES})
 
-# Link the CEF libraries to the executable
-target_link_libraries(AlphaBrowser ${CEF_LIBRARIES})
-
-# You may not need to copy any DLLs if they are handled by the package manager.
+# Link the libraries
+target_link_libraries(AlphaSurf ${GTK_LIBRARIES} ${WEBKIT_LIBRARIES})
