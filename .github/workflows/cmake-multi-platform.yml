@@ -1,4 +1,4 @@
-name: CMake on multiple platforms
+name: Build All Targets
 
 on:
   push:
@@ -65,16 +65,8 @@ jobs:
         ./vcpkg install gtk
         ./vcpkg install webkitgtk
 
-    - name: Configure CMake
-      run: >
-        cmake -B ${{ steps.strings.outputs.build-output-dir }}
-        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -S ${{ github.workspace }}
-
     - name: Build
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+      run: make
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
