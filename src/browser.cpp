@@ -2,11 +2,34 @@
 #include <webkit2/webkit2.h>
 #include <string>
 #include <fstream>
+#include <vector>
 #include <ctime>
 
-// Path to the configuration file
 const std::string CONFIG_FILE = "alphasurf_config.txt";
+const int MAX_DEFAULT_TABS = 10;  // Default max tabs allowed
+int maxTabsAllowed = MAX_DEFAULT_TABS;  // Global tab count limiter
 
+std::vector<WebKitWebView*> openTabs;  // Store open tabs
+// Define the on_setup_policy_decision function
+gboolean on_setup_policy_decision(WebKitWebView* web_view, WebKitPolicyDecision* decision, WebKitPolicyDecisionType type, gpointer user_data) {
+    // Check the type of decision being made
+    if (type == WEBKIT_POLICY_DECISION_TYPE_NAVIGATION_ACTION) {
+        WebKitNavigationPolicyDecision* navigation_decision = WEBKIT_NAVIGATION_POLICY_DECISION(decision);
+        WebKitNavigationAction* action = webkit_navigation_policy_decision_get_navigation_action(navigation_decision);
+        WebKitURIRequest* request = webkit_navigation_action_get_request(action);
+        const gchar* uri = webkit_uri_request_get_uri(request);
+
+        // Example: Allow everything, but you can add conditional logic to allow/block certain requests
+        g_print("Navigating to: %s\n", uri);
+
+        // Accept the decision to proceed with navigation
+        webkit_policy_decision_use(decision);
+        return TRUE;
+    }
+
+    // Default policy decision if not handled
+    return FALSE;
+}
 // Function to load settings from the config file
 std::string load_setting(const std::string& key) {
     std::ifstream config(CONFIG_FILE);
@@ -23,6 +46,19 @@ std::string load_setting(const std::string& key) {
 void save_setting(const std::string& key, const std::string& value) {
     std::ofstream config(CONFIG_FILE, std::ios_base::app);
     config << key << "=" << value << "\n";
+}
+
+// Load max tabs allowed
+void loadMaxTabsAllowed() {
+    std::string maxTabs = load_setting("max_tabs_allowed");
+    if (!maxTabs.empty()) {
+        maxTabsAllowed = std::stoi(maxTabs);
+    }
+}
+
+// Check if new tab can be opened
+bool canOpenNewTab() {
+    return openTabs.size() < maxTabsAllowed;
 }
 
 // Function to get the current time for the clock on the start page
@@ -103,169 +139,23 @@ std::string getStartPageHTML() {
     )";
 }
 
-// Function to get the HTML for the settings page
-std::string getSettingsPageHTML() {
-    std::string homepage = load_setting("homepage");
-    std::string search_engine = load_setting("search_engine");
-    std::string animations_enabled = load_setting("animations_enabled");
-    std::string zoom_level = load_setting("zoom_level");
-    std::string javascript_enabled = load_setting("javascript_enabled");
-    std::string popup_blocking = load_setting("popup_blocking");
-    std::string adblock_enabled = load_setting("adblock_enabled");
-    std::string bookmarks_bar = load_setting("bookmarks_bar");
-    std::string clear_cache_exit = load_setting("clear_cache_exit");
-    std::string dark_mode = load_setting("dark_mode");
-    std::string remember_history = load_setting("remember_history");
-    std::string extensions_enabled = load_setting("extensions_enabled");
-    std::string dev_tools_enabled = load_setting("dev_tools_enabled");
-    std::string do_not_track = load_setting("do_not_track");
-    std::string notifications_enabled = load_setting("notifications_enabled");
-    std::string preferred_language = load_setting("preferred_language");
-    std::string max_tabs_allowed = load_setting("max_tabs_allowed");
+// Function to handle new tab creation
+void addNewTab(GtkNotebook* notebook, const std::string& url) {
+    if (canOpenNewTab()) {
+        WebKitWebView* web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
+        openTabs.push_back(web_view);  // Add the new tab to the vector
 
-    return R"(
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    background-color: #f5f5f5;
-                    text-align: center;
-                    padding: 50px;
-                    opacity: 0;
-                    animation: fadeIn 1s forwards;
-                }
-                @keyframes fadeIn {
-                    from { opacity: 0; }
-                    to { opacity: 1; }
-                }
-                label {
-                    display: block;
-                    margin-top: 15px;
-                }
-            </style>
-        </head>
-        <body>
-            <h1>Settings - AlphaSurf</h1>
-            <form id="settings-form">
-                <label>
-                    Homepage URL: 
-                    <input type="text" id="homepage" value=")" + homepage + R"(">
-                </label>
-                <label>
-                    Default Search Engine:
-                    <select id="search_engine">
-                        <option value="duckduckgo" )" + (search_engine == "duckduckgo" ? "selected" : "") + R"(>DuckDuckGo</option>
-                        <option value="google" )" + (search_engine == "google" ? "selected" : "") + R"(>Google</option>
-                        <option value="bing" )" + (search_engine == "bing" ? "selected" : "") + R"(>Bing</option>
-                    </select>
-                </label>
-                <label>
-                    Default Zoom Level: 
-                    <input type="number" id="zoom_level" value=")" + zoom_level + R"(" min="50" max="200">%
-                </label>
-                <label>
-                    Enable JavaScript:
-                    <input type="checkbox" id="javascript_enabled" )" + (javascript_enabled == "true" ? "checked" : "") + R"(>
-                </label>
-                <label>
-                    Enable Animations: 
-                    <input type="checkbox" id="animations" )" + (animations_enabled == "true" ? "checked" : "") + R"(>
-                </label>
-                <label>
-                    Block Popups:
-                    <input type="checkbox" id="popup_blocking" )" + (popup_blocking == "true" ? "checked" : "") + R"(>
-                </label>
-                <label>
-                    Enable Adblock:
-                    <input type="checkbox" id="adblock_enabled" )" + (adblock_enabled == "true" ? "checked" : "") + R"(>
-                </label>
-                <label>
-                    Show Bookmarks Bar:
-                    <input type="checkbox" id="bookmarks_bar" )" + (bookmarks_bar == "true" ? "checked" : "") + R"(>
-                </label>
-                <label>
-                    Clear Cache on Exit:
-                    <input type="checkbox" id="clear_cache_exit" )" + (clear_cache_exit == "true" ? "checked" : "") + R"(>
-                </label>
-                <label>
-                    Enable Dark Mode:
-                    <input type="checkbox" id="dark_mode" )" + (dark_mode == "true" ? "checked" : "") + R"(>
-                </label>
-                <label>
-                    Remember History:
-                    <input type="checkbox" id="remember_history" )" + (remember_history == "true" ? "checked" : "") + R"(>
-                </label>
-                <label>
-                    Enable Extensions:
-                    <input type="checkbox" id="extensions_enabled" )" + (extensions_enabled == "true" ? "checked" : "") + R"(>
-                </label>
-                <label>
-                    Enable Developer Tools:
-                    <input type="checkbox" id="dev_tools_enabled" )" + (dev_tools_enabled == "true" ? "checked" : "") + R"(>
-                </label>
-                <label>
-                    Enable Do Not Track:
-                    <input type="checkbox" id="do_not_track" )" + (do_not_track == "true" ? "checked" : "") + R"(>
-                </label>
-                <label>
-                    Enable Web Notifications:
-                    <input type="checkbox" id="notifications_enabled" )" + (notifications_enabled == "true" ? "checked" : "") + R"(>
-                </label>
-                <label>
-                    Preferred Language:
-                    <input type="text" id="preferred_language" value=")" + preferred_language + R"(">
-                </label>
-                <label>
-                    Max Tabs Allowed:
-                    <input type="number" id="max_tabs_allowed" value=")" + max_tabs_allowed + R"(" min="1" max="100">
-                </label>
+        GtkWidget* tab_label = gtk_label_new(("Tab " + std::to_string(openTabs.size())).c_str());
+        gtk_notebook_append_page(notebook, GTK_WIDGET(web_view), tab_label);
+        gtk_widget_show_all(GTK_WIDGET(web_view));
 
-                <button type="button" onclick="saveSettings()">Save Settings</button>
-            </form>
-
-            <script>
-                function saveSettings() {
-                    const settings = {
-                        homepage: document.getElementById('homepage').value,
-                        search_engine: document.getElementById('search_engine').value,
-                        zoom_level: document.getElementById('zoom_level').value,
-                        javascript_enabled: document.getElementById('javascript_enabled').checked,
-                        animations: document.getElementById('animations').checked,
-                        popup_blocking: document.getElementById('popup_blocking').checked,
-                        adblock_enabled: document.getElementById('adblock_enabled').checked,
-                        bookmarks_bar: document.getElementById('bookmarks_bar').checked,
-                        clear_cache_exit: document.getElementById('clear_cache_exit').checked,
-                        dark_mode: document.getElementById('dark_mode').checked,
-                        remember_history: document.getElementById('remember_history').checked,
-                        extensions_enabled: document.getElementById('extensions_enabled').checked,
-                        dev_tools_enabled: document.getElementById('dev_tools_enabled').checked,
-                        do_not_track: document.getElementById('do_not_track').checked,
-                        notifications_enabled: document.getElementById('notifications_enabled').checked,
-                        preferred_language: document.getElementById('preferred_language').value,
-                        max_tabs_allowed: document.getElementById('max_tabs_allowed').value
-                    };
-
-                    fetch('/save-settings', {
-                        method: 'POST',
-                        body: JSON.stringify(settings),
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    }).then(response => response.json()).then(data => {
-                        alert('Settings saved!');
-                    }).catch(error => {
-                        alert('Error saving settings: ' + error);
-                    });
-                }
-            </script>
-        </body>
-        </html>
-    )";
+        load_url(web_view, url);  // Load URL (homepage or start page) in the new tab
+    } else {
+        g_print("Max tabs limit reached!\n");
+    }
 }
 
-// Function to load URL or built-in pages
+// Load a URL or a built-in page
 void load_url(WebKitWebView* web_view, const std::string& url) {
     if (url == "alpha://start") {
         webkit_web_view_load_html(web_view, getStartPageHTML().c_str(), nullptr);
@@ -284,47 +174,42 @@ int main(int argc, char* argv[]) {
     gtk_window_set_title(GTK_WINDOW(window), "AlphaSurf");
     gtk_window_set_default_size(GTK_WINDOW(window), 1024, 768);
 
-    // Setup screen logic
-    if (load_setting("setup_complete") != "true") {
-        // Show the setup/install screen on first launch
-        WebKitWebView* setup_web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
-        load_url(setup_web_view, "alpha://setup");
-        gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(setup_web_view));
-        g_signal_connect(setup_web_view, "decide-policy", G_CALLBACK(on_setup_policy_decision), NULL);
+    // Load max tabs setting
+    loadMaxTabsAllowed();
 
-        gtk_widget_show_all(window);
-        gtk_main();
-
-        return 0;
-    }
-
-    // Normal launch with tabs and settings
+    // Create the notebook for tabs
     GtkNotebook* notebook = GTK_NOTEBOOK(gtk_notebook_new());
 
-    // Create the initial tab with start page or no internet page
+    // Create the initial tab
     WebKitWebView* initial_web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
     std::string homepage = load_setting("homepage");
-    if (!homepage.empty()) {
-        load_url(initial_web_view, homepage);
-    } else {
-        load_url(initial_web_view, "alpha://start");
-    }
-
+    load_url(initial_web_view, homepage.empty() ? "alpha://start" : homepage);
     GtkWidget* initial_tab_label = gtk_label_new("Home");
     gtk_notebook_append_page(notebook, GTK_WIDGET(initial_web_view), initial_tab_label);
+    openTabs.push_back(initial_web_view);  // Add the initial tab to openTabs
 
-    // Toolbar with new tab button
+    // Toolbar for new tabs
     GtkWidget* toolbar = gtk_toolbar_new();
     GtkToolItem* new_tab_button = gtk_tool_button_new(NULL, "New Tab");
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), new_tab_button, -1);
 
+    // Event listener for adding new tabs
+    g_signal_connect(new_tab_button, "clicked", G_CALLBACK([](GtkWidget*, gpointer data) {
+        addNewTab(GTK_NOTEBOOK(data), "alpha://start");
+    }), notebook);
+
+    // Box layout to hold toolbar and notebook
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_box_pack_start(GTK_BOX(vbox), toolbar, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(notebook), TRUE, TRUE, 0);
 
-    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-    gtk_container_add(GTK_CONTAINER(window), vbox);
+    // Exit clean-up
+    g_signal_connect(window, "destroy", G_CALLBACK([](GtkWidget*, gpointer) {
+        gtk_main_quit();
+    }), nullptr);
 
+    // Finalize the window and start the GTK main loop
+    gtk_container_add(GTK_CONTAINER(window), vbox);
     gtk_widget_show_all(window);
     gtk_main();
 
