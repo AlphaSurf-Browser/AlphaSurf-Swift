@@ -66,7 +66,7 @@ jobs:
         ./vcpkg install webkitgtk
 
     - name: Build
-      run: gcc -o AlphaSurf src/*.cpp `pkg-config --cflags --libs gtk+-3.0 webkit2gtk-4.0 json-glib-1.0`
+      run: g++ -o AlphaSurf src/*.cpp `pkg-config --cflags --libs gtk+-3.0 webkit2gtk-4.0 json-glib-1.0`
 
 
     - name: Test
