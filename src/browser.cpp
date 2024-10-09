@@ -1,13 +1,12 @@
 #include <gtk/gtk.h>
 #include <webkit2/webkit2.h>
 #include <json-glib/json-glib.h>
-#include <fstream>
 #include <iostream>
-#include <map>
+#include <fstream>
 #include <vector>
 #include <string>
-#include <algorithm>
 
+// Constants for the start page HTML
 const char* START_PAGE_HTML = R"html(
 <!DOCTYPE html>
 <html lang="en">
@@ -41,6 +40,20 @@ const char* START_PAGE_HTML = R"html(
             margin-top: 20px;
             color: #555;
         }
+        #navbar {
+            background-color: #007BFF;
+            padding: 10px;
+        }
+        .navbar-button {
+            color: white;
+            background-color: transparent;
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+        }
+        .navbar-button:hover {
+            background-color: #0056b3;
+        }
     </style>
 </head>
 <body>
@@ -70,217 +83,101 @@ const char* START_PAGE_HTML = R"html(
 
 // Global variables
 GtkWidget *main_window;
-GtkWidget *notebook;
+GtkNotebook *notebook;
+GtkEntry *address_bar;
+
+// Bookmarks data structure
 std::vector<std::string> bookmarks;
-std::map<std::string, std::string> settings;
-std::map<std::string, std::vector<std::string>> history;
-GtkWidget *address_bar; // Address bar for URL input
-bool incognito_mode = false; // Incognito mode flag
 
-// Function prototypes
-void create_new_tab(const std::string &url);
-void load_homepage(GtkWidget *web_view);
-void on_tab_switch(GtkNotebook *notebook, GtkWidget *page, guint page_num, gpointer user_data);
-void load_bookmarks();
-void save_bookmarks();
-void load_settings();
-void save_settings();
-void add_bookmark(const std::string &title, const std::string &url);
-void remove_bookmark(const std::string &url);
-void show_bookmarks();
-void clear_history();
-void add_to_history(const std::string &title, const std::string &url);
-void show_history();
-void open_dev_tools();
-void on_new_tab_button_clicked(GtkWidget *widget);
-void on_bookmarks_button_clicked(GtkWidget *widget);
-void on_settings_button_clicked(GtkWidget *widget);
-void on_dev_tools_button_clicked(GtkWidget *widget);
-void on_history_button_clicked(GtkWidget *widget);
-void on_incognito_button_clicked(GtkWidget *widget);
-void initialize_ui();
-void update_address_bar(const std::string &url);
-std::string get_current_tab_url(); // New function to retrieve the current tab URL
-
-// Main function
-int main(int argc, char *argv[]) {
-    gtk_init(&argc, &argv);
-
-    // Load bookmarks and settings
-    load_bookmarks();
-    load_settings();
-
-    // Create main window
-    main_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(main_window), "AlphaSurf Browser");
-    gtk_window_set_default_size(GTK_WINDOW(main_window), 1200, 800);
-    g_signal_connect(main_window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-
-    // Initialize the UI
-    initialize_ui();
-
-    // Show all widgets
-    gtk_widget_show_all(main_window);
-    gtk_main();
-
-    // Save bookmarks and settings on exit
-    save_bookmarks();
-    save_settings();
-
-    return 0;
-}
-
-// Function to create a new tab
-void create_new_tab(const std::string &url) {
-    GtkWidget *web_view = webkit_web_view_new();
-    
-    // Load the START_PAGE_HTML for the specific URL
-    if (url == "alpha://start") {
-        webkit_web_view_load_html(WEBKIT_WEB_VIEW(web_view), START_PAGE_HTML, nullptr);
-    } else {
-        webkit_web_view_load_uri(WEBKIT_WEB_VIEW(web_view), url.c_str());
-    }
-
-    // Update the address bar when creating a new tab
-    update_address_bar(url);
-
-    GtkWidget *label = gtk_label_new(url.c_str());
-    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), web_view, label);
-
-    // Connect signal for when the page finishes loading
-    g_signal_connect(web_view, "load-changed", G_CALLBACK(add_to_history), (gpointer)url.c_str());
-}
-
-// Function to load bookmarks from a JSON file
-void load_bookmarks() {
+// Load settings and bookmarks from JSON file
+void load_settings() {
+    // Load bookmarks from a JSON file
     std::ifstream file("bookmarks.json");
     if (file.is_open()) {
         JsonParser *parser = json_parser_new();
         json_parser_load_from_file(parser, "bookmarks.json", NULL);
         JsonNode *root = json_parser_get_root(parser);
         JsonArray *array = json_node_get_array(root);
+
         for (int i = 0; i < json_array_get_length(array); i++) {
-            const gchar *bookmark = json_array_get_string_element(array, i);
-            bookmarks.push_back(std::string(bookmark));
+            bookmarks.push_back(json_array_get_string_element(array, i));
         }
         g_object_unref(parser);
     }
 }
 
-// Function to save bookmarks to a JSON file
+// Save bookmarks to a JSON file
 void save_bookmarks() {
-    if (incognito_mode) return; // Do not save bookmarks in incognito mode
-
+    JsonNode *root = json_node_new(JSON_NODE_ARRAY);
     JsonArray *array = json_array_new();
+    
     for (const auto &bookmark : bookmarks) {
         json_array_add_string_element(array, bookmark.c_str());
     }
-    JsonNode *root = json_node_new(JSON_NODE_ARRAY);
-    json_node_set_array(root, array);
-
+    
+    json_node_take_array(root, array);
     JsonGenerator *generator = json_generator_new();
     json_generator_set_root(generator, root);
     json_generator_to_file(generator, "bookmarks.json", NULL);
-    
     g_object_unref(generator);
-    json_node_free(root);
 }
 
-// Function to load settings from a JSON file
-void load_settings() {
-    std::ifstream file("settings.json");
-    if (file.is_open()) {
-        JsonParser *parser = json_parser_new();
-        json_parser_load_from_file(parser, "settings.json", NULL);
-        JsonNode *root = json_parser_get_root(parser);
-        JsonObject *object = json_node_get_object(root);
-        
-        // Load settings using an iterator
-        JsonObjectIter iter;
-        json_object_iter_init(&iter, object);
-        const gchar *key;
-        JsonNode *value;
-
-        while (json_object_iter_next(&iter, &key, &value)) {
-            settings[key] = json_node_get_string(value);
-        }
-        
-        g_object_unref(parser);
-    }
-}
-
-
-// Function to save settings to a JSON file
-void save_settings() {
-    JsonObject *object = json_object_new();
-    for (const auto &setting : settings) {
-        json_object_set_string_member(object, setting.first.c_str(), setting.second.c_str());
-    }
-    JsonNode *root = json_node_new(JSON_NODE_OBJECT);
-    json_node_set_object(root, object);
-
-    JsonGenerator *generator = json_generator_new();
-    json_generator_set_root(generator, root);
-    json_generator_to_file(generator, "settings.json", NULL);
-    
-    g_object_unref(generator);
-    json_node_free(root);
-}
-
-// Function to add a bookmark
-void add_bookmark(const std::string &title, const std::string &url) {
-    if (incognito_mode) return; // Do not add bookmarks in incognito mode
-    
+// Function to add a new bookmark
+void add_bookmark(const std::string &url) {
     bookmarks.push_back(url);
-    std::cout << "Bookmark added: " << title << " (" << url << ")\n";
-    save_bookmarks(); // Save immediately
-}
-
-// Function to remove a bookmark
-void remove_bookmark(const std::string &url) {
-    if (incognito_mode) return; // Do not remove bookmarks in incognito mode
-    
-    bookmarks.erase(std::remove(bookmarks.begin(), bookmarks.end(), url), bookmarks.end());
-    std::cout << "Bookmark removed: " << url << "\n";
-    save_bookmarks(); // Save immediately
+    save_bookmarks();
 }
 
 // Function to show bookmarks
 void show_bookmarks() {
     std::cout << "Bookmarks:\n";
     for (const auto &bookmark : bookmarks) {
-        std::cout << bookmark << "\n";
+        std::cout << bookmark << std::endl;
     }
 }
 
-// Function to clear history
-void clear_history() {
-    history.clear();
-}
-
-// Function to add a page to history
-void add_to_history(const std::string &title, const std::string &url) {
-    if (!incognito_mode) {
-        history[url].push_back(title);
+// Function to update the address bar
+void update_address_bar(const std::string &url) {
+    if (GTK_IS_ENTRY(address_bar)) {
+        gtk_entry_set_text(address_bar, url.c_str());
     }
 }
 
-// Function to show history
-void show_history() {
-    std::cout << "History:\n";
-    for (const auto &entry : history) {
-        std::cout << entry.first << "\n";
+// Function to create a new tab
+void create_new_tab(const std::string &url) {
+    GtkWidget *web_view = webkit_web_view_new();
+    
+    if (url == "alpha://start") {
+        webkit_web_view_load_html(WEBKIT_WEB_VIEW(web_view), START_PAGE_HTML, nullptr);
+    } else {
+        webkit_web_view_load_uri(WEBKIT_WEB_VIEW(web_view), url.c_str());
     }
+
+    update_address_bar(url);
+
+    GtkWidget *label = gtk_label_new(url.c_str());
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), web_view, label);
 }
 
-// Function to open developer tools
-void open_dev_tools() {
-    std::cout << "Developer tools opened.\n";
+// Function called when switching tabs
+void on_tab_switch(GtkNotebook *notebook, GtkWidget *page, guint page_num, gpointer user_data) {
+    std::string current_url = get_current_tab_url();
+    update_address_bar(current_url);
+}
+
+// Retrieve the current tab URL
+std::string get_current_tab_url() {
+    GtkWidget *current_page = gtk_notebook_get_nth_page(GTK_NOTEBOOK(notebook), gtk_notebook_get_current_page(GTK_NOTEBOOK(notebook)));
+    if (current_page) {
+        WebKitWebView *web_view = WEBKIT_WEB_VIEW(current_page);
+        return webkit_web_view_get_uri(web_view);
+    }
+    return "";
 }
 
 // Function to handle new tab button click
 void on_new_tab_button_clicked(GtkWidget *widget) {
-    create_new_tab("alpha://start"); // Open the start page
+    create_new_tab("alpha://start");
 }
 
 // Function to handle bookmarks button click
@@ -290,35 +187,40 @@ void on_bookmarks_button_clicked(GtkWidget *widget) {
 
 // Function to handle settings button click
 void on_settings_button_clicked(GtkWidget *widget) {
-    // Logic to show settings
+    // Simple settings display
     std::cout << "Settings opened.\n";
 }
 
 // Function to handle developer tools button click
 void on_dev_tools_button_clicked(GtkWidget *widget) {
-    open_dev_tools();
+    // Logic to open developer tools
+    std::cout << "Developer tools opened.\n";
 }
 
 // Function to handle history button click
 void on_history_button_clicked(GtkWidget *widget) {
-    show_history();
+    // Logic to show history
+    std::cout << "History opened.\n";
 }
 
 // Function to handle incognito button click
 void on_incognito_button_clicked(GtkWidget *widget) {
-    incognito_mode = !incognito_mode; // Toggle incognito mode
-    if (incognito_mode) {
-        std::cout << "Incognito mode activated.\n";
-    } else {
-        std::cout << "Incognito mode deactivated.\n";
-    }
+    std::cout << "Incognito mode activated.\n";
 }
 
-// Function to initialize the UI components
+// Initialize the UI components
 void initialize_ui() {
+    // Create the main window
+    main_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(main_window), "AlphaSurf");
+    gtk_window_set_default_size(GTK_WINDOW(main_window), 1200, 800);
+    
+    // Create a vertical box for the main layout
+    GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+
     // Create a navigation bar
     GtkWidget *navbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-
+    
     // Create buttons for navigation
     GtkWidget *new_tab_button = gtk_button_new_with_label("New Tab");
     GtkWidget *bookmarks_button = gtk_button_new_with_label("Bookmarks");
@@ -334,6 +236,10 @@ void initialize_ui() {
     gtk_box_pack_start(GTK_BOX(navbar), dev_tools_button, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(navbar), history_button, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(navbar), incognito_button, TRUE, TRUE, 0);
+    
+    // Add address bar
+    address_bar = GTK_ENTRY(gtk_entry_new());
+    gtk_box_pack_start(GTK_BOX(navbar), GTK_WIDGET(address_bar), TRUE, TRUE, 0);
 
     // Connect button signals
     g_signal_connect(new_tab_button, "clicked", G_CALLBACK(on_new_tab_button_clicked), NULL);
@@ -343,70 +249,33 @@ void initialize_ui() {
     g_signal_connect(history_button, "clicked", G_CALLBACK(on_history_button_clicked), NULL);
     g_signal_connect(incognito_button, "clicked", G_CALLBACK(on_incognito_button_clicked), NULL);
 
-    // Add navigation bar to the main window
-    gtk_container_add(GTK_CONTAINER(main_window), navbar);
+    // Add navbar to the main box
+    gtk_box_pack_start(GTK_BOX(main_box), navbar, FALSE, FALSE, 0);
 
     // Create notebook for tabs
-    notebook = gtk_notebook_new();
-    gtk_container_add(GTK_CONTAINER(main_window), notebook);
+    notebook = GTK_NOTEBOOK(gtk_notebook_new());
+    gtk_box_pack_start(GTK_BOX(main_box), GTK_WIDGET(notebook), TRUE, TRUE, 0);
 
     // Create default tab
     create_new_tab("alpha://start");
 
-    // Create an entry for the address bar
-    address_bar = gtk_entry_new();
-    gtk_box_pack_start(GTK_BOX(navbar), address_bar, TRUE, TRUE, 0);
-
     // Connect the tab switch signal
     g_signal_connect(notebook, "switch-page", G_CALLBACK(on_tab_switch), NULL);
+
+    // Add the main box to the window
+    gtk_container_add(GTK_CONTAINER(main_window), main_box);
 }
 
-// Function to show settings dialog
-void show_settings_dialog() {
-    GtkWidget *dialog = gtk_dialog_new_with_buttons("Settings", GTK_WINDOW(main_window),
-                                                    GTK_DIALOG_MODAL,
-                                                    "_OK", GTK_RESPONSE_OK,
-                                                    "_Cancel", GTK_RESPONSE_CANCEL,
-                                                    NULL);
+// Main function
+int main(int argc, char *argv[]) {
+    gtk_init(&argc, &argv);
 
-    GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    load_settings();
+    initialize_ui();
 
-    // Add settings options (e.g., homepage)
-    GtkWidget *homepage_label = gtk_label_new("Homepage:");
-    GtkWidget *homepage_entry = gtk_entry_new();
-    gtk_entry_set_text(GTK_ENTRY(homepage_entry), settings["homepage"].c_str());
-    gtk_box_pack_start(GTK_BOX(content_area), homepage_label, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(content_area), homepage_entry, TRUE, TRUE, 0);
+    g_signal_connect(main_window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    gtk_widget_show_all(main_window);
 
-    gtk_widget_show_all(dialog);
-
-    int response = gtk_dialog_run(GTK_DIALOG(dialog));
-    if (response == GTK_RESPONSE_OK) {
-        settings["homepage"] = gtk_entry_get_text(GTK_ENTRY(homepage_entry));
-        save_settings(); // Save settings immediately
-    }
-    gtk_widget_destroy(dialog);
-}
-
-// Function to update the address bar
-void update_address_bar(const std::string &url) {
-    gtk_entry_set_text(GTK_ENTRY(address_bar), url.c_str());
-}
-
-// Function to retrieve the current tab URL
-std::string get_current_tab_url() {
-    GtkWidget *current_page = gtk_notebook_get_nth_page(GTK_NOTEBOOK(notebook), gtk_notebook_get_current_page(GTK_NOTEBOOK(notebook)));
-    if (current_page) {
-        // Assuming web_view is of type WebKitWebView
-        WebKitWebView *web_view = WEBKIT_WEB_VIEW(current_page);
-        return webkit_web_view_get_uri(web_view); // Get the current URL of the web view
-    }
-    return "";
-}
-
-// Function called when switching tabs
-void on_tab_switch(GtkNotebook *notebook, GtkWidget *page, guint page_num, gpointer user_data) {
-    // Update the address bar with the URL of the current tab
-    std::string current_url = get_current_tab_url();
-    update_address_bar(current_url);
+    gtk_main();
+    return 0;
 }
