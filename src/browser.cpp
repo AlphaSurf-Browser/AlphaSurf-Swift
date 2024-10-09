@@ -84,10 +84,10 @@ GtkWidget* create_start_page(WebKitWebView* web_view) {
 }
 
 // Function to create a new tab with the start page
-WebKitWebView* create_new_tab() {
+GtkWidget* create_new_tab() {
     WebKitWebView* web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
     create_start_page(web_view);
-    return web_view;
+    return GTK_WIDGET(web_view); // Cast to GtkWidget*
 }
 
 int main(int argc, char** argv) {
@@ -102,8 +102,8 @@ int main(int argc, char** argv) {
     gtk_container_add(GTK_CONTAINER(window), notebook);
 
     // Create the first tab with the start page
-    WebKitWebView* initial_tab = create_new_tab();
-    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), GTK_WIDGET(initial_tab), gtk_label_new("Tab 1"));
+    GtkWidget* initial_tab = create_new_tab(); // Use GtkWidget* here
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), initial_tab, gtk_label_new("Tab 1"));
 
     // Connect the "destroy" signal to exit the application
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
