@@ -13,7 +13,7 @@ include_directories(${GTK_INCLUDE_DIRS} ${WEBKIT_INCLUDE_DIRS})
 
 # Specify the source files
 set(SOURCES
-    browser.cpp
+    src/browser.cpp
 )
 
 # Create the executable
