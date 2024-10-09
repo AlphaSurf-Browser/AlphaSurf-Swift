@@ -21,17 +21,6 @@ const char* START_PAGE_HTML = R"(
         h1 {
             color: #007acc;
         }
-        #search-button {
-            padding: 10px 15px;
-            background-color: #007acc;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        #search-button:hover {
-            background-color: #005f99;
-        }
     </style>
 </head>
 <body>
@@ -115,7 +104,6 @@ void on_refresh_button_clicked(GtkWidget* widget, gpointer data);
 void on_home_button_clicked(GtkWidget* widget, gpointer data);
 void on_settings_button_clicked(GtkWidget* widget, gpointer data);
 void perform_search(GtkEntry* entry, gpointer data);
-void open_settings_window();
 
 // Initialize WebView
 WebKitWebView* create_web_view(const gchar* uri) {
@@ -127,10 +115,7 @@ WebKitWebView* create_web_view(const gchar* uri) {
 
 // Function for handling URI requests
 void on_uri_requested(WebKitWebView* web_view, const gchar* uri) {
-    // Check if the URI uses the alpha:// scheme
     if (g_str_has_prefix(uri, "alpha://")) {
-        // Handle custom alpha:// scheme URIs
-        g_print("Navigating to custom URI: %s\n", uri);
         if (g_strcmp0(uri, "alpha://start") == 0) {
             webkit_web_view_load_html(web_view, START_PAGE_HTML, NULL);
             return;
@@ -139,7 +124,6 @@ void on_uri_requested(WebKitWebView* web_view, const gchar* uri) {
             return;
         }
     }
-    // Otherwise, load the URI normally
     webkit_web_view_load_uri(web_view, uri);
 }
 
@@ -156,9 +140,6 @@ void on_new_tab_button_clicked(GtkNotebook* notebook, GtkEntry* url_entry) {
     // Add new tab
     gtk_notebook_append_page(notebook, GTK_WIDGET(new_web_view), tab_label);
     gtk_widget_show(GTK_WIDGET(new_web_view));
-    
-    // Set URL entry to listen for load changes
-    g_signal_connect(new_web_view, "load-changed", G_CALLBACK(on_uri_requested), url_entry);
 }
 
 // Function for refreshing the current page
@@ -170,7 +151,7 @@ void on_refresh_button_clicked(GtkWidget* widget, gpointer data) {
 // Function for going to home page
 void on_home_button_clicked(GtkWidget* widget, gpointer data) {
     WebKitWebView* web_view = WEBKIT_WEB_VIEW(data);
-    const gchar* homepage = g_strdup(window.localStorage.getItem('homepage') || 'alpha://start');
+    const gchar* homepage = "alpha://start"; // Default start page
     webkit_web_view_load_uri(web_view, homepage);
 }
 
@@ -199,7 +180,7 @@ GtkWidget* create_toolbar(GtkNotebook* notebook, GtkEntry* url_entry) {
     
     // New tab button
     GtkToolItem* new_tab_button = gtk_tool_button_new(NULL, "New Tab");
-    g_signal_connect_data(new_tab_button, "clicked", G_CALLBACK(on_new_tab_button_clicked), notebook, NULL, 0);
+    g_signal_connect_data(new_tab_button, "clicked", G_CALLBACK(on_new_tab_button_clicked), notebook, NULL, G_CONNECT_FLAGS_NONE);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), new_tab_button, -1);
     
     // Refresh button
@@ -217,14 +198,14 @@ GtkWidget* create_toolbar(GtkNotebook* notebook, GtkEntry* url_entry) {
     g_signal_connect(settings_button, "clicked", G_CALLBACK(on_settings_button_clicked), NULL);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), settings_button, -1);
     
-    // URL Entry
+    // URL entry
     GtkToolItem* entry_item = gtk_tool_item_new();
     gtk_tool_item_set_expand(entry_item, TRUE);
-    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), entry_item, -1);
-    
-    // Create URL entry field
     gtk_tool_item_set_homogeneous(entry_item, TRUE);
     gtk_widget_show(entry_item);
+    
+    gtk_tool_item_set_widget(entry_item, url_entry);
+    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), entry_item, -1);
     
     // Connect search functionality
     g_signal_connect(url_entry, "activate", G_CALLBACK(perform_search), NULL);
@@ -238,15 +219,15 @@ int main(int argc, char *argv[]) {
 
     GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     GtkWidget *notebook = gtk_notebook_new();
-    GtkWidget *url_entry = gtk_entry_new();
+    GtkEntry* url_entry = GTK_ENTRY(gtk_entry_new());
 
     gtk_notebook_set_show_tabs(GTK_NOTEBOOK(notebook), TRUE);
     
     // Create initial tab
-    on_new_tab_button_clicked(GTK_NOTEBOOK(notebook), url_entry);
+    on_new_tab_button_clicked(GTK_NOTEBOOK(notebook), GTK_ENTRY(url_entry));
 
     // Create toolbar
-    GtkWidget* toolbar = create_toolbar(GTK_NOTEBOOK(notebook), url_entry);
+    GtkWidget* toolbar = create_toolbar(GTK_NOTEBOOK(notebook), GTK_ENTRY(url_entry));
     
     // Add widgets to the main window
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
