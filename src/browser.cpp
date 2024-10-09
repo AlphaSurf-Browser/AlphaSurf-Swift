@@ -214,7 +214,7 @@ void perform_search(WebKitWebView* web_view, const gchar* query) {
     load_url(web_view, search_url.c_str());
 }
 
-void on_uri_requested(WebKitWebView* web_view, WebKitWebFrame* frame, const gchar* uri) {
+void on_uri_requested(WebKitWebView* web_view, const gchar* uri) {
     if (g_str_has_prefix(uri, "alpha://")) {
         if (g_strcmp0(uri, "alpha://start") == 0) {
             open_alpha_start(web_view);
@@ -236,7 +236,7 @@ void on_uri_requested(WebKitWebView* web_view, WebKitWebFrame* frame, const gcha
 
 GtkWidget* create_toolbar(GtkNotebook* notebook) {
     GtkWidget* toolbar = gtk_toolbar_new();
-    
+
     GtkToolItem* refresh_button = gtk_tool_button_new(NULL, "Refresh");
     g_signal_connect(refresh_button, "clicked", G_CALLBACK(on_refresh_button_clicked), nullptr);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), refresh_button, -1);
