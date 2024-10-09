@@ -195,18 +195,20 @@ void load_settings() {
         JsonNode *root = json_parser_get_root(parser);
         JsonObject *object = json_node_get_object(root);
         
-        // Load settings
+        // Load settings using an iterator
+        JsonObjectIter iter;
+        json_object_iter_init(&iter, object);
         const gchar *key;
         JsonNode *value;
-        GList *keys = json_object_get_keys(object);
-        for (GList *iter = keys; iter != NULL; iter = iter->next) {
-            key = static_cast<const gchar *>(iter->data);
-            value = json_object_get_member(object, key);
+
+        while (json_object_iter_next(&iter, &key, &value)) {
             settings[key] = json_node_get_string(value);
         }
+        
         g_object_unref(parser);
     }
 }
+
 
 // Function to save settings to a JSON file
 void save_settings() {
