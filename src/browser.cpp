@@ -80,14 +80,14 @@ GtkWidget* create_start_page(WebKitWebView* web_view) {
     )html";
 
     webkit_web_view_load_html(web_view, html_content, nullptr);
-    return web_view;
+    return GTK_WIDGET(web_view); // Cast to GtkWidget*
 }
 
 // Function to create a new tab with the start page
 GtkWidget* create_new_tab() {
     WebKitWebView* web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
     create_start_page(web_view);
-    return GTK_WIDGET(web_view); // Cast to GtkWidget*
+    return GTK_WIDGET(web_view); // Explicitly cast to GtkWidget*
 }
 
 int main(int argc, char** argv) {
