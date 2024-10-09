@@ -450,8 +450,8 @@ int main(int argc, char* argv[]) {
     
     // Create and pack the navigation bar
     GtkWidget* navBar = create_navigation_bar();
-    gtk_box_pack_start(GTK_BOX(gtk_vbox_new(FALSE, 0)), navBar, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(gtk_vbox_new(FALSE, 0)), notebook, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);_new(FALSE, 0)), navBar, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);_new(FALSE, 0)), notebook, TRUE, TRUE, 0);
 
     // Connect the destroy event to exit the application
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), nullptr);
