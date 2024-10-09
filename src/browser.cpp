@@ -402,27 +402,34 @@ GtkWidget* create_navigation_bar() {
     // New Tab Button
     GtkToolItem* newTabButton = gtk_tool_button_new(nullptr, "New Tab");
     g_signal_connect(newTabButton, "clicked", G_CALLBACK([](GtkWidget* widget) {
-        create_new_tab("New Tab");
+        create_new_tab("New Tab"); // Ensure create_new_tab is defined correctly
     }), nullptr);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), newTabButton, -1);
 
     // Bookmarks Button
     GtkToolItem* bookmarksButton = gtk_tool_button_new(nullptr, "Bookmarks");
-    g_signal_connect(bookmarksButton, "clicked", G_CALLBACK(show_bookmarks_manager), nullptr);
+    g_signal_connect(bookmarksButton, "clicked", G_CALLBACK([](GtkWidget* widget) {
+        show_bookmarks_manager(); // Ensure this function is defined and takes no parameters
+    }), nullptr);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), bookmarksButton, -1);
 
     // History Button
     GtkToolItem* historyButton = gtk_tool_button_new(nullptr, "History");
-    g_signal_connect(historyButton, "clicked", G_CALLBACK(show_history), nullptr);
+    g_signal_connect(historyButton, "clicked", G_CALLBACK([](GtkWidget* widget) {
+        show_history(); // Ensure this function is defined correctly
+    }), nullptr);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), historyButton, -1);
 
     // Settings Button
     GtkToolItem* settingsButton = gtk_tool_button_new(nullptr, "Settings");
-    g_signal_connect(settingsButton, "clicked", G_CALLBACK(show_settings), nullptr);
+    g_signal_connect(settingsButton, "clicked", G_CALLBACK([](GtkWidget* widget) {
+        show_settings(); // Ensure this function is defined
+    }), nullptr);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), settingsButton, -1);
 
     return toolbar;
 }
+
 
 // Main function
 int main(int argc, char* argv[]) {
