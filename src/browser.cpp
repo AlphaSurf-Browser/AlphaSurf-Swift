@@ -1,73 +1,121 @@
 #include <gtk/gtk.h>
 #include <webkit2/webkit2.h>
+#include <iostream>
 #include <string>
+#include <filesystem>
 #include <fstream>
-#include <vector>
+#include <cstdlib>
 #include <ctime>
 
-const std::string CONFIG_FILE = "alphasurf_config.txt";
-const int MAX_DEFAULT_TABS = 10;  // Default max tabs allowed
-int maxTabsAllowed = MAX_DEFAULT_TABS;  // Global tab count limiter
+namespace fs = std::filesystem;
 
-std::vector<WebKitWebView*> openTabs;  // Store open tabs
-// Define the on_setup_policy_decision function
-gboolean on_setup_policy_decision(WebKitWebView* web_view, WebKitPolicyDecision* decision, WebKitPolicyDecisionType type, gpointer user_data) {
-    // Check the type of decision being made
-    if (type == WEBKIT_POLICY_DECISION_TYPE_NAVIGATION_ACTION) {
-        WebKitNavigationPolicyDecision* navigation_decision = WEBKIT_NAVIGATION_POLICY_DECISION(decision);
-        WebKitNavigationAction* action = webkit_navigation_policy_decision_get_navigation_action(navigation_decision);
-        WebKitURIRequest* request = webkit_navigation_action_get_request(action);
-        const gchar* uri = webkit_uri_request_get_uri(request);
+struct Settings {
+    std::string homepageURL;
+    std::string defaultSearchEngine;
+    bool enableAnimations;
+    int defaultZoomLevel;
+    bool enableJavaScript;
+    bool blockPopups;
+    bool enableAdblock;
+    bool showBookmarksBar;
+    bool clearCacheOnExit;
+    bool enableDarkMode;
+    bool rememberHistory;
+    bool enableExtensions;
+    bool enableDeveloperTools;
+    bool enableDoNotTrack;
+    bool enableWebNotifications;
+    std::string preferredLanguage;
+    int maxTabsAllowed;
 
-        // Example: Allow everything, but you can add conditional logic to allow/block certain requests
-        g_print("Navigating to: %s\n", uri);
+    // Constructor to set default values
+    Settings() : homepageURL("alpha://start"), defaultSearchEngine("DuckDuckGo"),
+                 enableAnimations(true), defaultZoomLevel(100), enableJavaScript(true),
+                 blockPopups(true), enableAdblock(false), showBookmarksBar(false),
+                 clearCacheOnExit(false), enableDarkMode(false), rememberHistory(true),
+                 enableExtensions(false), enableDeveloperTools(false),
+                 enableDoNotTrack(false), enableWebNotifications(false),
+                 preferredLanguage("en"), maxTabsAllowed(10) {}
+};
 
-        // Accept the decision to proceed with navigation
-        webkit_policy_decision_use(decision);
-        return TRUE;
-    }
+// Global settings variable
+Settings settings;
 
-    // Default policy decision if not handled
-    return FALSE;
-}
-// Function to load settings from the config file
-std::string load_setting(const std::string& key) {
-    std::ifstream config(CONFIG_FILE);
-    std::string line;
-    while (std::getline(config, line)) {
-        if (line.find(key) == 0) {
-            return line.substr(key.size() + 1);
+// Function declarations
+void loadSettings();
+void saveSettings();
+std::string getStartPageHTML();
+std::string getNoInternetPageHTML();
+std::string getSettingsPageHTML();
+std::string getInstallPageHTML();
+void load_url(WebKitWebView* web_view, const std::string& url);
+void applySettings(WebKitWebView* web_view);
+void installBrowser(const std::string& appName);
+void on_window_destroy(GtkWidget*, gpointer);
+void on_new_tab_button_clicked(GtkWidget*, gpointer);
+void on_settings_save_button_clicked(GtkWidget*, gpointer);
+
+// Function to load settings from a configuration file
+void loadSettings() {
+    std::ifstream inFile("settings.conf");
+    if (inFile.is_open()) {
+        std::string line;
+        while (std::getline(inFile, line)) {
+            if (line.find("homepageURL=") == 0) settings.homepageURL = line.substr(12);
+            else if (line.find("defaultSearchEngine=") == 0) settings.defaultSearchEngine = line.substr(20);
+            else if (line.find("enableAnimations=") == 0) settings.enableAnimations = (line.substr(17) == "true");
+            else if (line.find("defaultZoomLevel=") == 0) settings.defaultZoomLevel = std::stoi(line.substr(17));
+            else if (line.find("enableJavaScript=") == 0) settings.enableJavaScript = (line.substr(17) == "true");
+            else if (line.find("blockPopups=") == 0) settings.blockPopups = (line.substr(12) == "true");
+            else if (line.find("enableAdblock=") == 0) settings.enableAdblock = (line.substr(14) == "true");
+            else if (line.find("showBookmarksBar=") == 0) settings.showBookmarksBar = (line.substr(17) == "true");
+            else if (line.find("clearCacheOnExit=") == 0) settings.clearCacheOnExit = (line.substr(17) == "true");
+            else if (line.find("enableDarkMode=") == 0) settings.enableDarkMode = (line.substr(15) == "true");
+            else if (line.find("rememberHistory=") == 0) settings.rememberHistory = (line.substr(16) == "true");
+            else if (line.find("enableExtensions=") == 0) settings.enableExtensions = (line.substr(17) == "true");
+            else if (line.find("enableDeveloperTools=") == 0) settings.enableDeveloperTools = (line.substr(21) == "true");
+            else if (line.find("enableDoNotTrack=") == 0) settings.enableDoNotTrack = (line.substr(17) == "true");
+            else if (line.find("enableWebNotifications=") == 0) settings.enableWebNotifications = (line.substr(21) == "true");
+            else if (line.find("preferredLanguage=") == 0) settings.preferredLanguage = line.substr(18);
+            else if (line.find("maxTabsAllowed=") == 0) settings.maxTabsAllowed = std::stoi(line.substr(15));
         }
-    }
-    return "";
-}
-
-// Function to save settings to the config file
-void save_setting(const std::string& key, const std::string& value) {
-    std::ofstream config(CONFIG_FILE, std::ios_base::app);
-    config << key << "=" << value << "\n";
-}
-
-// Load max tabs allowed
-void loadMaxTabsAllowed() {
-    std::string maxTabs = load_setting("max_tabs_allowed");
-    if (!maxTabs.empty()) {
-        maxTabsAllowed = std::stoi(maxTabs);
+        inFile.close();
+    } else {
+        std::cout << "No settings file found. Using default settings." << std::endl;
     }
 }
 
-// Check if new tab can be opened
-bool canOpenNewTab() {
-    return openTabs.size() < maxTabsAllowed;
+// Function to save settings to a configuration file
+void saveSettings() {
+    std::ofstream outFile("settings.conf");
+    if (outFile.is_open()) {
+        outFile << "homepageURL=" << settings.homepageURL << "\n";
+        outFile << "defaultSearchEngine=" << settings.defaultSearchEngine << "\n";
+        outFile << "enableAnimations=" << (settings.enableAnimations ? "true" : "false") << "\n";
+        outFile << "defaultZoomLevel=" << settings.defaultZoomLevel << "\n";
+        outFile << "enableJavaScript=" << (settings.enableJavaScript ? "true" : "false") << "\n";
+        outFile << "blockPopups=" << (settings.blockPopups ? "true" : "false") << "\n";
+        outFile << "enableAdblock=" << (settings.enableAdblock ? "true" : "false") << "\n";
+        outFile << "showBookmarksBar=" << (settings.showBookmarksBar ? "true" : "false") << "\n";
+        outFile << "clearCacheOnExit=" << (settings.clearCacheOnExit ? "true" : "false") << "\n";
+        outFile << "enableDarkMode=" << (settings.enableDarkMode ? "true" : "false") << "\n";
+        outFile << "rememberHistory=" << (settings.rememberHistory ? "true" : "false") << "\n";
+        outFile << "enableExtensions=" << (settings.enableExtensions ? "true" : "false") << "\n";
+        outFile << "enableDeveloperTools=" << (settings.enableDeveloperTools ? "true" : "false") << "\n";
+        outFile << "enableDoNotTrack=" << (settings.enableDoNotTrack ? "true" : "false") << "\n";
+        outFile << "enableWebNotifications=" << (settings.enableWebNotifications ? "true" : "false") << "\n";
+        outFile << "preferredLanguage=" << settings.preferredLanguage << "\n";
+        outFile << "maxTabsAllowed=" << settings.maxTabsAllowed << "\n";
+        outFile.close();
+    }
 }
 
-// Function to get the current time for the clock on the start page
+// Function to get the current time as a string
 std::string getCurrentTime() {
     time_t now = time(0);
-    tm* localtm = localtime(&now);
-    char time_str[10];
-    strftime(time_str, sizeof(time_str), "%H:%M:%S", localtm);
-    return std::string(time_str);
+    char buf[80];
+    strftime(buf, sizeof(buf), "%H:%M:%S", localtime(&now));
+    return std::string(buf);
 }
 
 // Function to get the HTML for the start page
@@ -83,8 +131,6 @@ std::string getStartPageHTML() {
                     margin: 0;
                     padding: 20px;
                     text-align: center;
-                    opacity: 0;
-                    animation: fadeIn 1s forwards;
                 }
                 h1 {
                     color: #007bff;
@@ -103,10 +149,6 @@ std::string getStartPageHTML() {
                     margin-top: 10px;
                     color: #555;
                 }
-                @keyframes fadeIn {
-                    from { opacity: 0; }
-                    to { opacity: 1; }
-                }
             </style>
         </head>
         <body>
@@ -123,39 +165,169 @@ std::string getStartPageHTML() {
                         }
                     }
                 });
-
-                function updateClock() {
-                    const clock = document.getElementById('clock');
-                    setInterval(() => {
-                        const now = new Date();
-                        clock.textContent = 'Time: ' + now.toLocaleTimeString();
-                    }, 1000);
-                }
-
-                updateClock();
             </script>
         </body>
         </html>
     )";
 }
 
-// Function to handle new tab creation
-void addNewTab(GtkNotebook* notebook, const std::string& url) {
-    if (canOpenNewTab()) {
-        WebKitWebView* web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
-        openTabs.push_back(web_view);  // Add the new tab to the vector
-
-        GtkWidget* tab_label = gtk_label_new(("Tab " + std::to_string(openTabs.size())).c_str());
-        gtk_notebook_append_page(notebook, GTK_WIDGET(web_view), tab_label);
-        gtk_widget_show_all(GTK_WIDGET(web_view));
-
-        load_url(web_view, url);  // Load URL (homepage or start page) in the new tab
-    } else {
-        g_print("Max tabs limit reached!\n");
-    }
+// Function to get the HTML for the no internet page
+std::string getNoInternetPageHTML() {
+    return R"(
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    text-align: center;
+                    padding: 50px;
+                }
+                h1 {
+                    color: red;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>No Internet</h1>
+            <p>Please check your connection and try again.</p>
+        </body>
+        </html>
+    )";
 }
 
-// Load a URL or a built-in page
+// Function to get the HTML for the settings page
+std::string getSettingsPageHTML() {
+    return R"(
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    text-align: center;
+                    padding: 50px;
+                }
+                input[type="text"], select {
+                    width: 80%;
+                    padding: 10px;
+                    margin: 5px 0;
+                    border: 1px solid #007bff;
+                    border-radius: 5px;
+                }
+                input[type="checkbox"] {
+                    margin: 10px;
+                }
+                button {
+                    padding: 10px 20px;
+                    background-color: #007bff;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                }
+                button:hover {
+                    background-color: #0056b3;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>Settings - AlphaSurf</h1>
+            <form id="settingsForm">
+                <label for="homepage">Homepage URL:</label>
+                <input type="text" id="homepage" value=")" + settings.homepageURL + R"("><br>
+                <label for="searchEngine">Default Search Engine:</label>
+                <select id="searchEngine">
+                    <option value="DuckDuckGo" )" + (settings.defaultSearchEngine == "DuckDuckGo" ? "selected" : "") + R">(DuckDuckGo)</option>
+                    <option value="Google" )" + (settings.defaultSearchEngine == "Google" ? "selected" : "") + R">(Google)</option>
+                    <option value="Bing" )" + (settings.defaultSearchEngine == "Bing" ? "selected" : "") + R">(Bing)</option>
+                </select><br>
+                <label for="animations">Enable Animations:</label>
+                <input type="checkbox" id="animations" )" + (settings.enableAnimations ? "checked" : "") + R"(><br>
+                <label for="zoom">Default Zoom Level:</label>
+                <input type="text" id="zoom" value=")" + std::to_string(settings.defaultZoomLevel) + R"("><br>
+                <label for="javascript">Enable JavaScript:</label>
+                <input type="checkbox" id="javascript" )" + (settings.enableJavaScript ? "checked" : "") + R"(><br>
+                <label for="blockPopups">Block Popups:</label>
+                <input type="checkbox" id="blockPopups" )" + (settings.blockPopups ? "checked" : "") + R"(><br>
+                <label for="adblock">Enable Adblock:</label>
+                <input type="checkbox" id="adblock" )" + (settings.enableAdblock ? "checked" : "") + R"(><br>
+                <label for="bookmarksBar">Show Bookmarks Bar:</label>
+                <input type="checkbox" id="bookmarksBar" )" + (settings.showBookmarksBar ? "checked" : "") + R"(><br>
+                <label for="clearCache">Clear Cache on Exit:</label>
+                <input type="checkbox" id="clearCache" )" + (settings.clearCacheOnExit ? "checked" : "") + R"(><br>
+                <label for="darkMode">Enable Dark Mode:</label>
+                <input type="checkbox" id="darkMode" )" + (settings.enableDarkMode ? "checked" : "") + R"(><br>
+                <label for="history">Remember History:</label>
+                <input type="checkbox" id="history" )" + (settings.rememberHistory ? "checked" : "") + R"(><br>
+                <label for="extensions">Enable Extensions:</label>
+                <input type="checkbox" id="extensions" )" + (settings.enableExtensions ? "checked" : "") + R"(><br>
+                <label for="developerTools">Enable Developer Tools:</label>
+                <input type="checkbox" id="developerTools" )" + (settings.enableDeveloperTools ? "checked" : "") + R"(><br>
+                <label for="doNotTrack">Enable Do Not Track:</label>
+                <input type="checkbox" id="doNotTrack" )" + (settings.enableDoNotTrack ? "checked" : "") + R"(><br>
+                <label for="notifications">Enable Web Notifications:</label>
+                <input type="checkbox" id="notifications" )" + (settings.enableWebNotifications ? "checked" : "") + R"(><br>
+                <label for="language">Preferred Language:</label>
+                <input type="text" id="language" value=")" + settings.preferredLanguage + R"("><br>
+                <label for="maxTabs">Max Tabs Allowed:</label>
+                <input type="text" id="maxTabs" value=")" + std::to_string(settings.maxTabsAllowed) + R"("><br>
+                <button type="button" onclick="saveSettings()">Save Settings</button>
+            </form>
+            <script>
+                function saveSettings() {
+                    const settingsForm = document.getElementById('settingsForm');
+                    const data = {
+                        homepageURL: settingsForm.homepage.value,
+                        defaultSearchEngine: settingsForm.searchEngine.value,
+                        enableAnimations: settingsForm.animations.checked,
+                        defaultZoomLevel: settingsForm.zoom.value,
+                        enableJavaScript: settingsForm.javascript.checked,
+                        blockPopups: settingsForm.blockPopups.checked,
+                        enableAdblock: settingsForm.adblock.checked,
+                        showBookmarksBar: settingsForm.bookmarksBar.checked,
+                        clearCacheOnExit: settingsForm.clearCache.checked,
+                        enableDarkMode: settingsForm.darkMode.checked,
+                        rememberHistory: settingsForm.history.checked,
+                        enableExtensions: settingsForm.extensions.checked,
+                        enableDeveloperTools: settingsForm.developerTools.checked,
+                        enableDoNotTrack: settingsForm.doNotTrack.checked,
+                        enableWebNotifications: settingsForm.notifications.checked,
+                        preferredLanguage: settingsForm.language.value,
+                        maxTabsAllowed: settingsForm.maxTabs.value,
+                    };
+                    // Send the settings to the main application for processing
+                    // Implement the necessary IPC mechanism to send the data back
+                }
+            </script>
+        </body>
+        </html>
+    )";
+}
+
+// Function to get the HTML for the install page
+std::string getInstallPageHTML() {
+    return R"(
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    text-align: center;
+                    padding: 50px;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>Installing AlphaSurf...</h1>
+            <p>Please wait while we set everything up.</p>
+        </body>
+        </html>
+    )";
+}
+
+// Function to create a new tab and load the specified URL
 void load_url(WebKitWebView* web_view, const std::string& url) {
     if (url == "alpha://start") {
         webkit_web_view_load_html(web_view, getStartPageHTML().c_str(), nullptr);
@@ -166,51 +338,79 @@ void load_url(WebKitWebView* web_view, const std::string& url) {
     }
 }
 
+// Function to apply the settings
+void applySettings(WebKitWebView* web_view) {
+    // Here you can apply settings logic, such as enabling/disabling features
+    if (settings.enableJavaScript) {
+        // Enable JavaScript logic here
+    }
+    if (settings.enableAdblock) {
+        // Enable ad-blocking logic here
+    }
+    // More settings can be applied as needed
+}
+
+// Function to handle installation
+void installBrowser(const std::string& appName) {
+    std::string installDir;
+
+#ifdef _WIN32
+    installDir = "C:\\Program Files\\" + appName + "\\";
+#else
+    installDir = "/usr/local/bin/";
+#endif
+
+    // Create the installation directory if it doesn't exist
+    fs::create_directories(installDir);
+
+    // Move the application binary to the installation directory
+    fs::path currentPath = fs::current_path();
+    fs::path appPath = currentPath / appName;
+
+    if (fs::exists(appPath)) {
+        fs::rename(appPath, installDir / appName);
+    }
+
+    // Save the settings to the installation directory
+    saveSettings();
+}
+
+// Callback for when the window is destroyed
+void on_window_destroy(GtkWidget*, gpointer) {
+    saveSettings();
+    gtk_main_quit();
+}
+
+// Callback for new tab button click
+void on_new_tab_button_clicked(GtkWidget*, gpointer) {
+    // Open a new tab with the homepage URL
+    load_url(web_view, settings.homepageURL);
+}
+
+// Callback for saving settings
+void on_settings_save_button_clicked(GtkWidget*, gpointer) {
+    // Logic to save the settings will be here
+    saveSettings();
+}
+
 // Main function
 int main(int argc, char* argv[]) {
     gtk_init(&argc, &argv);
+    loadSettings();
 
+    // Create main window
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(window), "AlphaSurf");
-    gtk_window_set_default_size(GTK_WINDOW(window), 1024, 768);
-
-    // Load max tabs setting
-    loadMaxTabsAllowed();
-
-    // Create the notebook for tabs
-    GtkNotebook* notebook = GTK_NOTEBOOK(gtk_notebook_new());
-
-    // Create the initial tab
-    WebKitWebView* initial_web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
-    std::string homepage = load_setting("homepage");
-    load_url(initial_web_view, homepage.empty() ? "alpha://start" : homepage);
-    GtkWidget* initial_tab_label = gtk_label_new("Home");
-    gtk_notebook_append_page(notebook, GTK_WIDGET(initial_web_view), initial_tab_label);
-    openTabs.push_back(initial_web_view);  // Add the initial tab to openTabs
-
-    // Toolbar for new tabs
-    GtkWidget* toolbar = gtk_toolbar_new();
-    GtkToolItem* new_tab_button = gtk_tool_button_new(NULL, "New Tab");
-    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), new_tab_button, -1);
-
-    // Event listener for adding new tabs
-    g_signal_connect(new_tab_button, "clicked", G_CALLBACK([](GtkWidget*, gpointer data) {
-        addNewTab(GTK_NOTEBOOK(data), "alpha://start");
-    }), notebook);
-
-    // Box layout to hold toolbar and notebook
-    GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_box_pack_start(GTK_BOX(vbox), toolbar, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(notebook), TRUE, TRUE, 0);
-
-    // Exit clean-up
-    g_signal_connect(window, "destroy", G_CALLBACK([](GtkWidget*, gpointer) {
-        gtk_main_quit();
-    }), nullptr);
-
-    // Finalize the window and start the GTK main loop
-    gtk_container_add(GTK_CONTAINER(window), vbox);
+    g_signal_connect(window, "destroy", G_CALLBACK(on_window_destroy), nullptr);
+    
+    // Create web view
+    WebKitWebView* web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
+    gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(web_view));
     gtk_widget_show_all(window);
+    
+    // Load initial URL (homepage)
+    load_url(web_view, settings.homepageURL);
+    
+    gtk_widget_show(window);
     gtk_main();
 
     return 0;
