@@ -53,6 +53,7 @@ void applySettings(WebKitWebView* web_view);
 void installBrowser(const std::string& appName);
 void on_window_destroy(GtkWidget*, gpointer);
 void on_new_tab_button_clicked(GtkWidget*, gpointer);
+void on_save_settings(GtkWidget*, gpointer);
 
 // Function to load settings from a configuration file
 void loadSettings() {
@@ -197,7 +198,7 @@ std::string getNoInternetPageHTML() {
 
 // Function to get the HTML for the settings page
 std::string getSettingsPageHTML() {
-    return R"(
+    std::string settingsHTML = R"(
         <!DOCTYPE html>
         <html>
         <head>
@@ -207,12 +208,73 @@ std::string getSettingsPageHTML() {
                     text-align: center;
                     padding: 50px;
                 }
+                label {
+                    display: block;
+                    margin: 10px 0;
+                }
+                input[type="text"], select {
+                    width: 200px;
+                    padding: 5px;
+                    margin: 5px 0;
+                }
+                input[type="checkbox"] {
+                    margin: 10px 5px;
+                }
             </style>
         </head>
         <body>
             <h1>Settings - AlphaSurf</h1>
-            <p>Here you can customize your browser settings.</p>
-            <button onclick="window.close()">Close Settings</button>
+            <form id="settingsForm">
+                <label>Homepage URL: <input type="text" id="homepageURL" value=")" + settings.homepageURL + R"("></label>
+                <label>Default Search Engine:
+                    <select id="defaultSearchEngine">
+                        <option value="DuckDuckGo" )" + (settings.defaultSearchEngine == "DuckDuckGo" ? "selected" : "") + R"(>DuckDuckGo</option>
+                        <option value="Google" )" + (settings.defaultSearchEngine == "Google" ? "selected" : "") + R"(>Google</option>
+                        <option value="Bing" )" + (settings.defaultSearchEngine == "Bing" ? "selected" : "") + R"(>Bing</option>
+                    </select>
+                </label>
+                <label><input type="checkbox" id="enableAnimations" )" + (settings.enableAnimations ? "checked" : "") + R"( /> Enable Animations</label>
+                <label>Default Zoom Level: <input type="text" id="defaultZoomLevel" value=")" + std::to_string(settings.defaultZoomLevel) + R"("></label>
+                <label><input type="checkbox" id="enableJavaScript" )" + (settings.enableJavaScript ? "checked" : "") + R"( /> Enable JavaScript</label>
+                <label><input type="checkbox" id="blockPopups" )" + (settings.blockPopups ? "checked" : "") + R"( /> Block Popups</label>
+                <label><input type="checkbox" id="enableAdblock" )" + (settings.enableAdblock ? "checked" : "") + R"( /> Enable Adblock</label>
+                <label><input type="checkbox" id="showBookmarksBar" )" + (settings.showBookmarksBar ? "checked" : "") + R"( /> Show Bookmarks Bar</label>
+                <label><input type="checkbox" id="clearCacheOnExit" )" + (settings.clearCacheOnExit ? "checked" : "") + R"( /> Clear Cache on Exit</label>
+                <label><input type="checkbox" id="enableDarkMode" )" + (settings.enableDarkMode ? "checked" : "") + R"( /> Enable Dark Mode</label>
+                <label><input type="checkbox" id="rememberHistory" )" + (settings.rememberHistory ? "checked" : "") + R"( /> Remember History</label>
+                <label><input type="checkbox" id="enableExtensions" )" + (settings.enableExtensions ? "checked" : "") + R"( /> Enable Extensions</label>
+                <label><input type="checkbox" id="enableDeveloperTools" )" + (settings.enableDeveloperTools ? "checked" : "") + R"( /> Enable Developer Tools</label>
+                <label><input type="checkbox" id="enableDoNotTrack" )" + (settings.enableDoNotTrack ? "checked" : "") + R"( /> Enable Do Not Track</label>
+                <label><input type="checkbox" id="enableWebNotifications" )" + (settings.enableWebNotifications ? "checked" : "") + R"( /> Enable Web Notifications</label>
+                <label>Preferred Language: <input type="text" id="preferredLanguage" value=")" + settings.preferredLanguage + R"("></label>
+                <label>Max Tabs Allowed: <input type="text" id="maxTabsAllowed" value=")" + std::to_string(settings.maxTabsAllowed) + R"("></label>
+                <button type="button" onclick="saveSettings()">Save Settings</button>
+            </form>
+            <script>
+                function saveSettings() {
+                    const settings = {
+                        homepageURL: document.getElementById('homepageURL').value,
+                        defaultSearchEngine: document.getElementById('defaultSearchEngine').value,
+                        enableAnimations: document.getElementById('enableAnimations').checked,
+                        defaultZoomLevel: document.getElementById('defaultZoomLevel').value,
+                        enableJavaScript: document.getElementById('enableJavaScript').checked,
+                        blockPopups: document.getElementById('blockPopups').checked,
+                        enableAdblock: document.getElementById('enableAdblock').checked,
+                        showBookmarksBar: document.getElementById('showBookmarksBar').checked,
+                        clearCacheOnExit: document.getElementById('clearCacheOnExit').checked,
+                        enableDarkMode: document.getElementById('enableDarkMode').checked,
+                        rememberHistory: document.getElementById('rememberHistory').checked,
+                        enableExtensions: document.getElementById('enableExtensions').checked,
+                        enableDeveloperTools: document.getElementById('enableDeveloperTools').checked,
+                        enableDoNotTrack: document.getElementById('enableDoNotTrack').checked,
+                        enableWebNotifications: document.getElementById('enableWebNotifications').checked,
+                        preferredLanguage: document.getElementById('preferredLanguage').value,
+                        maxTabsAllowed: document.getElementById('maxTabsAllowed').value
+                    };
+                    // Send settings to the main application to be saved
+                    window.open('data:text/plain,' + JSON.stringify(settings), '_self');
+                }
+            </script>
         </body>
         </html>
     )";
@@ -288,6 +350,13 @@ void on_new_tab_button_clicked(GtkWidget*, gpointer) {
     load_url(web_view, settings.homepageURL);
 }
 
+// Callback for saving settings
+void on_save_settings(GtkWidget*, gpointer) {
+    // Logic to save settings from the HTML form to the settings structure
+    // This function would be triggered when the Save Settings button is clicked.
+    // The actual logic will be integrated into the JavaScript in getSettingsPageHTML.
+}
+
 // Main function
 int main(int argc, char* argv[]) {
     gtk_init(&argc, &argv);
@@ -310,12 +379,15 @@ int main(int argc, char* argv[]) {
     }
 
     // Create new tab button
-    GtkWidget* new_tab_button = gtk_button_new_with_label("New Tab");
-    g_signal_connect(new_tab_button, "clicked", G_CALLBACK(on_new_tab_button_clicked), NULL);
-    gtk_container_add(GTK_CONTAINER(window), new_tab_button);
+    GtkWidget* newTabButton = gtk_button_new_with_label("New Tab");
+    g_signal_connect(newTabButton, "clicked", G_CALLBACK(on_new_tab_button_clicked), NULL);
+    gtk_container_add(GTK_CONTAINER(window), newTabButton);
 
+    // Show everything
     gtk_widget_show_all(window);
-    gtk_main();
+    gtk_window_set_title(GTK_WINDOW(window), "AlphaSurf");
+    gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
 
+    gtk_main();
     return 0;
 }
