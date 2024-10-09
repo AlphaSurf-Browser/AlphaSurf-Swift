@@ -172,7 +172,7 @@ void on_settings_button_clicked(GtkNotebook* notebook) {
     gtk_notebook_set_current_page(notebook, gtk_notebook_get_n_pages(notebook) - 1);
 }
 
-void on_new_tab_button_clicked(GtkNotebook* notebook, GtkEntry* url_entry) {
+void on_new_tab_button_clicked(GtkNotebook* notebook) {
     WebKitWebView* new_web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
     open_alpha_start(new_web_view);  // Load start page in new tab
 
@@ -182,9 +182,6 @@ void on_new_tab_button_clicked(GtkNotebook* notebook, GtkEntry* url_entry) {
     
     // Connect the "destroy" signal to clean up the web view
     g_signal_connect(new_web_view, "destroy", G_CALLBACK(gtk_widget_destroy), NULL);
-
-    // Set URL entry to the new tab
-    g_signal_connect(new_web_view, "load-changed", G_CALLBACK(on_load_changed), url_entry);
 }
 
 void perform_search(WebKitWebView* web_view, const gchar* query) {
@@ -224,6 +221,9 @@ void on_load_changed(WebKitWebView* web_view, WebKitLoadEvent load_event, GtkEnt
     }
 }
 
+// Function prototype for the toolbar creation
+GtkWidget* create_toolbar(GtkNotebook* notebook, GtkEntry* url_entry);
+
 GtkWidget* create_toolbar(GtkNotebook* notebook, GtkEntry* url_entry) {
     GtkWidget* toolbar = gtk_toolbar_new();
 
@@ -240,13 +240,18 @@ GtkWidget* create_toolbar(GtkNotebook* notebook, GtkEntry* url_entry) {
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), settings_button, -1);
 
     GtkToolItem* new_tab_button = gtk_tool_button_new(NULL, "New Tab");
-    g_signal_connect(new_tab_button, "clicked", G_CALLBACK(on_new_tab_button_clicked), notebook, url_entry);
+    g_signal_connect(new_tab_button, "clicked", G_CALLBACK(on_new_tab_button_clicked), notebook);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), new_tab_button, -1);
 
     // URL Entry
-    GtkWidget* entry = gtk_entry_new();
-    g_signal_connect(entry, "activate", G_CALLBACK(perform_search), notebook);
-    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), entry, -1);
+    GtkToolItem* entry_item = gtk_tool_item_new();
+    gtk_tool_item_set_expand(entry_item, TRUE);
+    gtk_tool_item_set_homogeneous(entry_item, TRUE);
+    gtk_tool_item_set_widget(entry_item, url_entry);
+    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), entry_item, -1);
+
+    // Connect the entry's activate signal
+    g_signal_connect(url_entry, "activate", G_CALLBACK(perform_search), nullptr);
 
     return toolbar;
 }
@@ -264,18 +269,17 @@ int main(int argc, char* argv[]) {
     // Create URL entry and toolbar
     GtkWidget* url_entry = gtk_entry_new();
     GtkWidget* toolbar = create_toolbar(GTK_NOTEBOOK(notebook), GTK_ENTRY(url_entry));
-    
+
     GtkWidget* header_bar = gtk_header_bar_new();
     gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(header_bar), TRUE);
     gtk_header_bar_set_title(GTK_HEADER_BAR(header_bar), "AlphaSurf");
     gtk_header_bar_pack_start(GTK_HEADER_BAR(header_bar), toolbar);
     gtk_window_set_titlebar(GTK_WINDOW(window), header_bar);
-    
+
     // Initial tab
-    on_new_tab_button_clicked(GTK_NOTEBOOK(notebook), GTK_ENTRY(url_entry));
+    on_new_tab_button_clicked(GTK_NOTEBOOK(notebook));
 
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-    g_signal_connect(window, "destroy", G_CALLBACK(gtk_widget_destroy), NULL);
 
     gtk_widget_show_all(window);
     gtk_main();
