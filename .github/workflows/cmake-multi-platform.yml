@@ -5,6 +5,8 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  release:
+    types: [created]
 
 jobs:
   build:
@@ -76,3 +78,26 @@ jobs:
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: ctest --build-config ${{ matrix.build_type }}
+
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: "v1.0.0"  # Adjust the versioning as needed
+        release_name: "AlphaSurf Release"
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Release Assets
+      if: steps.create_release.outputs.id
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: "v1.0.0"  # Same as above
+        files: |
+          ${{ steps.strings.outputs.build-output-dir }}/AlphaSurf
+          ${{ steps.strings.outputs.build-output-dir }}/*.exe  # If you're building .exe files on Windows
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
