@@ -89,7 +89,7 @@ jobs:
         draft: false
         prerelease: false
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
 
     - name: Upload Release Assets
       if: steps.create_release.outputs.id
@@ -100,4 +100,4 @@ jobs:
           ${{ steps.strings.outputs.build-output-dir }}/AlphaSurf
           ${{ steps.strings.outputs.build-output-dir }}/*.exe  # If you're building .exe files on Windows
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
