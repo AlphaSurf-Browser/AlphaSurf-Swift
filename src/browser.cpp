@@ -5,6 +5,7 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <unordered_set>
 
 // Constants for the start page HTML
 const char* START_PAGE_HTML = R"html(
@@ -86,8 +87,10 @@ GtkWidget *main_window;
 GtkNotebook *notebook;
 GtkEntry *address_bar;
 
-// Bookmarks data structure
+// Bookmarks and history data structures
 std::vector<std::string> bookmarks;
+std::vector<std::string> history;
+std::unordered_set<std::string> ad_block_list = {"example.com", "ads.com"}; // Example ad domains
 
 // Load settings and bookmarks from JSON file
 void load_settings() {
@@ -143,6 +146,16 @@ void update_address_bar(const std::string &url) {
     }
 }
 
+// Function to retrieve the current tab URL
+std::string get_current_tab_url() {
+    GtkWidget *current_page = gtk_notebook_get_nth_page(GTK_NOTEBOOK(notebook), gtk_notebook_get_current_page(GTK_NOTEBOOK(notebook)));
+    if (current_page) {
+        WebKitWebView *web_view = WEBKIT_WEB_VIEW(current_page);
+        return webkit_web_view_get_uri(web_view);
+    }
+    return "";
+}
+
 // Function to create a new tab
 void create_new_tab(const std::string &url) {
     GtkWidget *web_view = webkit_web_view_new();
@@ -150,7 +163,15 @@ void create_new_tab(const std::string &url) {
     if (url == "alpha://start") {
         webkit_web_view_load_html(WEBKIT_WEB_VIEW(web_view), START_PAGE_HTML, nullptr);
     } else {
+        // Check for ad blocking
+        for (const auto &ad_domain : ad_block_list) {
+            if (url.find(ad_domain) != std::string::npos) {
+                std::cout << "Blocked ad URL: " << url << std::endl;
+                return; // Don't load the ad URL
+            }
+        }
         webkit_web_view_load_uri(WEBKIT_WEB_VIEW(web_view), url.c_str());
+        history.push_back(url); // Add to history
     }
 
     update_address_bar(url);
@@ -163,16 +184,6 @@ void create_new_tab(const std::string &url) {
 void on_tab_switch(GtkNotebook *notebook, GtkWidget *page, guint page_num, gpointer user_data) {
     std::string current_url = get_current_tab_url();
     update_address_bar(current_url);
-}
-
-// Retrieve the current tab URL
-std::string get_current_tab_url() {
-    GtkWidget *current_page = gtk_notebook_get_nth_page(GTK_NOTEBOOK(notebook), gtk_notebook_get_current_page(GTK_NOTEBOOK(notebook)));
-    if (current_page) {
-        WebKitWebView *web_view = WEBKIT_WEB_VIEW(current_page);
-        return webkit_web_view_get_uri(web_view);
-    }
-    return "";
 }
 
 // Function to handle new tab button click
@@ -199,13 +210,16 @@ void on_dev_tools_button_clicked(GtkWidget *widget) {
 
 // Function to handle history button click
 void on_history_button_clicked(GtkWidget *widget) {
-    // Logic to show history
-    std::cout << "History opened.\n";
+    std::cout << "History:\n";
+    for (const auto &url : history) {
+        std::cout << url << std::endl;
+    }
 }
 
 // Function to handle incognito button click
 void on_incognito_button_clicked(GtkWidget *widget) {
     std::cout << "Incognito mode activated.\n";
+    // Additional logic for incognito mode can be implemented here
 }
 
 // Initialize the UI components
