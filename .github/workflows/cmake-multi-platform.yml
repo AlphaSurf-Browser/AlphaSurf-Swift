@@ -84,7 +84,7 @@ jobs:
       id: create_release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: "v2.1.0"  # Adjust the versioning as needed
+        tag_name: "v2.1.1"  # Adjust the versioning as needed
         release_name: "AlphaSurf Release"
         draft: false
         prerelease: false
@@ -95,7 +95,7 @@ jobs:
       if: steps.create_release.outputs.id
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: "v2.1.0"  # Same as above
+        tag_name: "v2.1.1"  # Same as above
         files: |
           ${{ steps.strings.outputs.build-output-dir }}/AlphaSurf
           ${{ steps.strings.outputs.build-output-dir }}/*.exe  # If you're building .exe files on Windows
