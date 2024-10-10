@@ -17,54 +17,83 @@ const char* START_PAGE_HTML = R"html(
     <title>Welcome to AlphaSurf</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
-            padding: 20px;
-            background-color: #f0f0f0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+        .container {
             text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+        h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
         }
         #search {
-            width: 80%;
+            width: 100%;
             padding: 15px;
             font-size: 18px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            margin-top: 20px;
-            transition: border-color 0.3s;
+            border: none;
+            border-radius: 30px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            transition: all 0.3s ease;
+        }
+        #search::placeholder {
+            color: rgba(255, 255, 255, 0.7);
         }
         #search:focus {
-            border-color: #007BFF;
             outline: none;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.3);
         }
         #time {
-            font-size: 20px;
+            font-size: 24px;
             margin-top: 20px;
-            color: #555;
+            font-weight: 300;
         }
-        #navbar {
-            background-color: #007BFF;
-            padding: 10px;
+        #bookmarks {
+            margin-top: 30px;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
         }
-        .navbar-button {
-            color: white;
-            background-color: transparent;
-            border: none;
-            padding: 10px;
+        .bookmark {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 10px 20px;
+            margin: 10px;
             cursor: pointer;
+            transition: all 0.3s ease;
         }
-        .navbar-button:hover {
-            background-color: #0056b3;
+        .bookmark:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-3px);
         }
     </style>
 </head>
 <body>
-    <h1>Welcome to AlphaSurf!</h1>
-    <input type="text" id="search" placeholder="Search Google..." />
-    <div id="time"></div>
+    <div class="container">
+        <h1>AlphaSurf</h1>
+        <input type="text" id="search" placeholder="Search or enter URL" />
+        <div id="time"></div>
+        <div id="bookmarks"></div>
+    </div>
     <script>
         function updateTime() {
             const now = new Date();
-            document.getElementById('time').textContent = "Current time: " + now.toLocaleTimeString();
+            document.getElementById('time').textContent = now.toLocaleTimeString();
         }
         setInterval(updateTime, 1000);
         updateTime();
@@ -73,10 +102,29 @@ const char* START_PAGE_HTML = R"html(
             if (e.key === 'Enter') {
                 const query = this.value;
                 if (query) {
-                    window.open('https://www.google.com/search?q=' + encodeURIComponent(query), '_self');
+                    if (query.startsWith('http://') || query.startsWith('https://')) {
+                        window.location.href = query;
+                    } else {
+                        window.location.href = 'https://www.google.com/search?q=' + encodeURIComponent(query);
+                    }
                 }
             }
         });
+
+        // Function to load bookmarks (to be implemented)
+        function loadBookmarks() {
+            // This function will be called from C++ to populate bookmarks
+        }
+
+        // Function to add a bookmark to the start page
+        function addBookmark(url, title) {
+            const bookmarksDiv = document.getElementById('bookmarks');
+            const bookmarkElem = document.createElement('div');
+            bookmarkElem.className = 'bookmark';
+            bookmarkElem.textContent = title || url;
+            bookmarkElem.onclick = () => window.location.href = url;
+            bookmarksDiv.appendChild(bookmarkElem);
+        }
     </script>
 </body>
 </html>
@@ -86,15 +134,29 @@ const char* START_PAGE_HTML = R"html(
 GtkWidget *main_window;
 GtkNotebook *notebook;
 GtkEntry *address_bar;
-
-// Bookmarks and history data structures
 std::vector<std::string> bookmarks;
 std::vector<std::string> history;
-std::unordered_set<std::string> ad_block_list = {"example.com", "ads.com"}; // Example ad domains
+std::unordered_set<std::string> ad_block_list = {"example.com", "ads.com"};
+
+// Function prototypes
+void load_settings();
+void save_bookmarks();
+void add_bookmark(const std::string &url, const std::string &title);
+void show_bookmarks();
+void update_address_bar(const std::string &url);
+std::string get_current_tab_url();
+void create_new_tab(const std::string &url);
+void on_tab_switch(GtkNotebook *notebook, GtkWidget *page, guint page_num, gpointer user_data);
+void on_new_tab_button_clicked(GtkWidget *widget);
+void on_bookmarks_button_clicked(GtkWidget *widget);
+void on_settings_button_clicked(GtkWidget *widget);
+void on_dev_tools_button_clicked(GtkWidget *widget);
+void on_history_button_clicked(GtkWidget *widget);
+void on_incognito_button_clicked(GtkWidget *widget);
+void initialize_ui();
 
 // Load settings and bookmarks from JSON file
 void load_settings() {
-    // Load bookmarks from a JSON file
     std::ifstream file("bookmarks.json");
     if (file.is_open()) {
         JsonParser *parser = json_parser_new();
@@ -103,7 +165,15 @@ void load_settings() {
         JsonArray *array = json_node_get_array(root);
 
         for (int i = 0; i < json_array_get_length(array); i++) {
-            bookmarks.push_back(json_array_get_string_element(array, i));
+            JsonObject *obj = json_array_get_object_element(array, i);
+            std::string url = json_object_get_string_member(obj, "url");
+            std::string title = json_object_get_string_member(obj, "title");
+            bookmarks.push_back(url);
+            // Call JavaScript function to add bookmark to start page
+            WebKitWebView *web_view = WEBKIT_WEB_VIEW(gtk_notebook_get_nth_page(notebook, 0));
+            gchar *js = g_strdup_printf("addBookmark('%s', '%s');", url.c_str(), title.c_str());
+            webkit_web_view_run_javascript(web_view, js, NULL, NULL, NULL);
+            g_free(js);
         }
         g_object_unref(parser);
     }
@@ -115,7 +185,10 @@ void save_bookmarks() {
     JsonArray *array = json_array_new();
     
     for (const auto &bookmark : bookmarks) {
-        json_array_add_string_element(array, bookmark.c_str());
+        JsonObject *obj = json_object_new();
+        json_object_set_string_member(obj, "url", bookmark.c_str());
+        json_object_set_string_member(obj, "title", bookmark.c_str()); // Using URL as title for simplicity
+        json_array_add_object_element(array, obj);
     }
     
     json_node_take_array(root, array);
@@ -126,17 +199,37 @@ void save_bookmarks() {
 }
 
 // Function to add a new bookmark
-void add_bookmark(const std::string &url) {
+void add_bookmark(const std::string &url, const std::string &title) {
     bookmarks.push_back(url);
     save_bookmarks();
+    
+    // Add bookmark to start page
+    WebKitWebView *web_view = WEBKIT_WEB_VIEW(gtk_notebook_get_nth_page(notebook, 0));
+    gchar *js = g_strdup_printf("addBookmark('%s', '%s');", url.c_str(), title.c_str());
+    webkit_web_view_run_javascript(web_view, js, NULL, NULL, NULL);
+    g_free(js);
 }
 
 // Function to show bookmarks
 void show_bookmarks() {
-    std::cout << "Bookmarks:\n";
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Bookmarks",
+                                                    GTK_WINDOW(main_window),
+                                                    GTK_DIALOG_MODAL,
+                                                    "Close",
+                                                    GTK_RESPONSE_CLOSE,
+                                                    NULL);
+    GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    GtkWidget *list_box = gtk_list_box_new();
+    gtk_container_add(GTK_CONTAINER(content_area), list_box);
+
     for (const auto &bookmark : bookmarks) {
-        std::cout << bookmark << std::endl;
+        GtkWidget *label = gtk_label_new(bookmark.c_str());
+        gtk_list_box_insert(GTK_LIST_BOX(list_box), label, -1);
     }
+
+    gtk_widget_show_all(dialog);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
 }
 
 // Function to update the address bar
@@ -176,8 +269,10 @@ void create_new_tab(const std::string &url) {
 
     update_address_bar(url);
 
-    GtkWidget *label = gtk_label_new(url.c_str());
-    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), web_view, label);
+    GtkWidget *label = gtk_label_new("New Tab");
+    int page_num = gtk_notebook_append_page(GTK_NOTEBOOK(notebook), web_view, label);
+    gtk_notebook_set_current_page(GTK_NOTEBOOK(notebook), page_num);
+    gtk_widget_show_all(GTK_WIDGET(notebook));
 }
 
 // Function called when switching tabs
@@ -198,13 +293,11 @@ void on_bookmarks_button_clicked(GtkWidget *widget) {
 
 // Function to handle settings button click
 void on_settings_button_clicked(GtkWidget *widget) {
-    // Simple settings display
     std::cout << "Settings opened.\n";
 }
 
 // Function to handle developer tools button click
 void on_dev_tools_button_clicked(GtkWidget *widget) {
-    // Logic to open developer tools
     std::cout << "Developer tools opened.\n";
 }
 
@@ -219,23 +312,29 @@ void on_history_button_clicked(GtkWidget *widget) {
 // Function to handle incognito button click
 void on_incognito_button_clicked(GtkWidget *widget) {
     std::cout << "Incognito mode activated.\n";
-    // Additional logic for incognito mode can be implemented here
+}
+
+// Function to handle address bar activation
+void on_address_bar_activate(GtkEntry *entry, gpointer user_data) {
+    const gchar *url = gtk_entry_get_text(entry);
+    if (url && *url) {
+        std::string processed_url = url;
+        if (processed_url.find("://") == std::string::npos) {
+            processed_url = "https://" + processed_url;
+        }
+        create_new_tab(processed_url);
+    }
 }
 
 // Initialize the UI components
 void initialize_ui() {
-    // Create the main window
     main_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(main_window), "AlphaSurf");
     gtk_window_set_default_size(GTK_WINDOW(main_window), 1200, 800);
     
-    // Create a vertical box for the main layout
     GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-
-    // Create a navigation bar
     GtkWidget *navbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     
-    // Create buttons for navigation
     GtkWidget *new_tab_button = gtk_button_new_with_label("New Tab");
     GtkWidget *bookmarks_button = gtk_button_new_with_label("Bookmarks");
     GtkWidget *settings_button = gtk_button_new_with_label("Settings");
@@ -243,41 +342,49 @@ void initialize_ui() {
     GtkWidget *history_button = gtk_button_new_with_label("History");
     GtkWidget *incognito_button = gtk_button_new_with_label("Incognito");
 
-    // Pack buttons into the navigation bar
-    gtk_box_pack_start(GTK_BOX(navbar), new_tab_button, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(navbar), bookmarks_button, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(navbar), settings_button, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(navbar), dev_tools_button, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(navbar), history_button, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(navbar), incognito_button, TRUE, TRUE, 0);
-    
-    // Add address bar
+    gtk_box_pack_start(GTK_BOX(navbar), new_tab_button, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(navbar), bookmarks_button, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(navbar), settings_button, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(navbar), dev_tools_button, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(navbar), history_button, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(navbar), incognito_button, FALSE, FALSE, 0);
+
     address_bar = GTK_ENTRY(gtk_entry_new());
     gtk_box_pack_start(GTK_BOX(navbar), GTK_WIDGET(address_bar), TRUE, TRUE, 0);
 
-    // Connect button signals
     g_signal_connect(new_tab_button, "clicked", G_CALLBACK(on_new_tab_button_clicked), NULL);
     g_signal_connect(bookmarks_button, "clicked", G_CALLBACK(on_bookmarks_button_clicked), NULL);
     g_signal_connect(settings_button, "clicked", G_CALLBACK(on_settings_button_clicked), NULL);
     g_signal_connect(dev_tools_button, "clicked", G_CALLBACK(on_dev_tools_button_clicked), NULL);
     g_signal_connect(history_button, "clicked", G_CALLBACK(on_history_button_clicked), NULL);
     g_signal_connect(incognito_button, "clicked", G_CALLBACK(on_incognito_button_clicked), NULL);
+    g_signal_connect(address_bar, "activate", G_CALLBACK(on_address_bar_activate), NULL);
 
-    // Add navbar to the main box
     gtk_box_pack_start(GTK_BOX(main_box), navbar, FALSE, FALSE, 0);
 
-    // Create notebook for tabs
     notebook = GTK_NOTEBOOK(gtk_notebook_new());
     gtk_box_pack_start(GTK_BOX(main_box), GTK_WIDGET(notebook), TRUE, TRUE, 0);
 
-    // Create default tab
     create_new_tab("alpha://start");
 
-    // Connect the tab switch signal
     g_signal_connect(notebook, "switch-page", G_CALLBACK(on_tab_switch), NULL);
 
-    // Add the main box to the window
     gtk_container_add(GTK_CONTAINER(main_window), main_box);
+}
+
+// Function to handle page load finished
+void on_load_changed(WebKitWebView *web_view, WebKitLoadEvent load_event, gpointer user_data) {
+    if (load_event == WEBKIT_LOAD_FINISHED) {
+        const gchar *url = webkit_web_view_get_uri(web_view);
+        update_address_bar(url);
+        
+        // Update tab label with page title
+        GtkWidget *tab_label = gtk_notebook_get_tab_label(notebook, GTK_WIDGET(web_view));
+        if (GTK_IS_LABEL(tab_label)) {
+            const gchar *title = webkit_web_view_get_title(web_view);
+            gtk_label_set_text(GTK_LABEL(tab_label), title ? title : "Untitled");
+        }
+    }
 }
 
 // Main function
