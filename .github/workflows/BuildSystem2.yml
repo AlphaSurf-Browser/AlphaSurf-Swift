@@ -10,115 +10,49 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        build_type: [Release]
-        c_compiler: [gcc, clang, cl]
-        include:
-          - os: windows-latest
-            c_compiler: cl
-            cpp_compiler: cl
-          - os: ubuntu-latest
-            c_compiler: gcc
-            cpp_compiler: g++
-          - os: ubuntu-latest
-            c_compiler: clang
-            cpp_compiler: clang++
-        exclude:
-          - os: windows-latest
-            c_compiler: gcc
-          - os: windows-latest
-            c_compiler: clang
-          - os: ubuntu-latest
-            c_compiler: cl
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Set reusable strings
-        id: strings
-        shell: bash
-        run: |
-          echo "build-output-dir=${{ github.workspace }}/" >> "$GITHUB_OUTPUT"
+    - name: Set reusable strings
+      id: strings
+      shell: bash
+      run: |
+        echo "build-output-dir=${{ github.workspace }}/" >> "$GITHUB_OUTPUT"
 
-      - name: Install dependencies on Ubuntu
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt update
-          sudo apt install -y \
-            build-essential \
-            git \
-            cmake \
-            meson \
-            ninja-build \
-            libgtk-3-dev \
-            libjson-glib-dev \
-            libglib2.0-dev \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            libgdk-pixbuf2.0-dev \
-            libharfbuzz-dev \
-            libjpeg-dev \
-            libpng-dev \
-            libsoup2.4-dev \
-            libpango1.0-dev \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev
+    - name: Install dependencies on Ubuntu
+      run: |
+        sudo apt update
+        sudo apt install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+        sudo apt-get install libjson-c-dev libjson-glib-dev build-essential json-glib-tools
 
-      - name: Clone and Build WebKitGTK
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          git clone https://github.com/WebKit/WebKit.git
-          cd WebKit
-          git checkout main  # or specify a version/tag you want to build
-          ./Tools/Build/bin/build-webkit --gtk --release
+    - name: Build on Ubuntu
+      run: |
+        g++ -o AlphaSurf src/*.cpp `pkg-config --cflags --libs gtk+-3.0 webkit2gtk-4.0 json-glib-1.0`
 
-      - name: Install GTK and WebKitGTK on Windows
-        if: matrix.os == 'windows-latest'
-        run: |
-          echo "Installing GTK and WebKitGTK"
-          choco install gtk --version=3.24.29 --yes
-          choco install webkitgtk --version=2.28.0 --yes
+    - name: Test
+      working-directory: ${{ steps.strings.outputs.build-output-dir }}
+      run: ctest --build-config Release
 
-      - name: Build on Ubuntu
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          g++ -o AlphaSurf src/*.cpp `pkg-config --cflags --libs gtk+-3.0 webkit2gtk-4.0 json-glib-1.0`
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: "v2.1.7"
+        release_name: "AlphaSurf Release 2.1.7"
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
 
-      - name: Build on Windows
-        if: matrix.os == 'windows-latest'
-        run: |
-          call "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
-          cl /EHsc /FeAlphaSurf.exe src\*.cpp /I C:\GTK\include /I C:\WebKitGTK\include /link /LIBPATH:C:\GTK\lib /LIBPATH:C:\WebKitGTK\lib webkitgtk-4.0.lib gtk-3.lib
-
-      - name: Test
-        working-directory: ${{ steps.strings.outputs.build-output-dir }}
-        run: ctest --build-config ${{ matrix.build_type }}
-
-      - name: Create Release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: "v2.1.6"
-          release_name: "AlphaSurf Release"
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
-
-      - name: Upload Release Assets
-        if: steps.create_release.outputs.id
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: "v2.1.6"
-          files: |
-            ${{ steps.strings.outputs.build-output-dir }}/AlphaSurf
-            ${{ steps.strings.outputs.build-output-dir }}/AlphaSurf.exe  # For Windows builds
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+    - name: Upload Release Assets
+      if: steps.create_release.outputs.id
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: "v2.1.7"
+        files: |
+          ${{ steps.strings.outputs.build-output-dir }}/AlphaSurf
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
