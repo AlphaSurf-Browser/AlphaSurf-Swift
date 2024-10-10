@@ -53,14 +53,16 @@ jobs:
         sudo apt install -y libgtk-3-dev libwebkit2gtk-4.0-dev
         sudo apt-get install libjson-c-dev libjson-glib-dev build-essential json-glib-tools
 
-    - name: Install dependencies on Windows (MSYS2)
+    - name: Install dependencies on Windows
       if: matrix.os == 'windows-latest'
       run: |
-        echo "Installing MSYS2"
-        Invoke-WebRequest -Uri https://repo.msys2.org/distrib/x86_64/msys2-x86_64-latest.exe -OutFile msys2.exe
-        Start-Process msys2.exe -Wait
-        C:\msys64\usr\bin\bash -lc "pacman -Syu --noconfirm"
-        C:\msys64\usr\bin\bash -lc "pacman -S --noconfirm mingw-w64-x86_64-toolchain mingw-w64-x86_64-gtk3 mingw-w64-x86_64-webkitgtk"
+        echo "Downloading GTK and WebKitGTK pre-built binaries"
+        # Replace the following URLs with appropriate pre-built GTK and WebKitGTK for Windows
+        curl -L -o gtk.zip https://download.gnome.org/binaries/win32/gtk+/3.24/gtk+-3.24.zip
+        curl -L -o webkitgtk.zip https://webkitgtk.org/releases/webkitgtk-4.0-win64.zip
+        echo "Extracting binaries"
+        tar -xf gtk.zip -C C:/GTK
+        tar -xf webkitgtk.zip -C C:/WebKitGTK
 
     - name: Build on Ubuntu
       if: matrix.os == 'ubuntu-latest'
@@ -70,7 +72,7 @@ jobs:
     - name: Build on Windows
       if: matrix.os == 'windows-latest'
       run: |
-        cl /EHsc /FeAlphaSurf.exe src\*.cpp /I C:\msys64\mingw64\include /link /LIBPATH:C:\msys64\mingw64\lib webkitgtk-4.0.lib gtk-3.lib
+        cl /EHsc /FeAlphaSurf.exe src\*.cpp /I C:\GTK\include /I C:\WebKitGTK\include /link /LIBPATH:C:\GTK\lib /LIBPATH:C:\WebKitGTK\lib webkitgtk-4.0.lib gtk-3.lib
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
@@ -81,7 +83,7 @@ jobs:
       id: create_release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: "v2.1.5"  # Adjusted version
+        tag_name: "v2.1.6"
         release_name: "AlphaSurf Release"
         draft: false
         prerelease: false
@@ -92,7 +94,7 @@ jobs:
       if: steps.create_release.outputs.id
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: "v2.1.5"
+        tag_name: "v2.1.6"
         files: |
           ${{ steps.strings.outputs.build-output-dir }}/AlphaSurf
           ${{ steps.strings.outputs.build-output-dir }}/AlphaSurf.exe  # For Windows builds
