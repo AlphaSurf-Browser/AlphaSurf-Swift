@@ -50,18 +50,19 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt update
-          sudo apt install -y libgtk-3-dev libwebkit2gtk-4.0-dev
-          sudo apt-get install -y libjson-c-dev libjson-glib-dev build-essential json-glib-tools
+          sudo apt install -y libjson-c-dev libjson-glib-dev build-essential json-glib-tools
 
-      - name: Install dependencies on Windows
+      - name: Install Chocolatey on Windows
         if: matrix.os == 'windows-latest'
         run: |
-          echo "Downloading GTK and WebKitGTK pre-built binaries"
-          curl -L -o gtk.zip https://download.gnome.org/binaries/win32/gtk+/3.24/gtk+-3.24.zip
-          curl -L -o webkitgtk.zip https://webkitgtk.org/releases/webkitgtk-4.0-win64.zip
-          echo "Extracting binaries"
-          powershell -Command "Expand-Archive -Path gtk.zip -DestinationPath C:\GTK"
-          powershell -Command "Expand-Archive -Path webkitgtk.zip -DestinationPath C:\WebKitGTK"
+          @powershell -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))"
+
+      - name: Install GTK and WebKitGTK on Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          echo "Installing GTK and WebKitGTK"
+          choco install gtk --version=3.24.29 --yes
+          choco install webkitgtk --version=2.28.0 --yes
 
       - name: Build on Ubuntu
         if: matrix.os == 'ubuntu-latest'
@@ -71,6 +72,7 @@ jobs:
       - name: Build on Windows
         if: matrix.os == 'windows-latest'
         run: |
+          call "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
           cl /EHsc /FeAlphaSurf.exe src\*.cpp /I C:\GTK\include /I C:\WebKitGTK\include /link /LIBPATH:C:\GTK\lib /LIBPATH:C:\WebKitGTK\lib webkitgtk-4.0.lib gtk-3.lib
 
       - name: Test
@@ -82,7 +84,7 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: "v2.1.7"
+          tag_name: "v2.1.6"
           release_name: "AlphaSurf Release"
           draft: false
           prerelease: false
@@ -93,7 +95,7 @@ jobs:
         if: steps.create_release.outputs.id
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: "v2.1.7"
+          tag_name: "v2.1.6"
           files: |
             ${{ steps.strings.outputs.build-output-dir }}/AlphaSurf
             ${{ steps.strings.outputs.build-output-dir }}/AlphaSurf.exe  # For Windows builds
