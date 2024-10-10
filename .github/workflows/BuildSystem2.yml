@@ -2,15 +2,40 @@ name: Build All Targets
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
   pull_request:
-    branches: ["main"]
+    branches: [ "main" ]
   release:
     types: [created]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        build_type: [Release]
+        c_compiler: [gcc, clang, cl]
+        include:
+          - os: windows-latest
+            c_compiler: cl
+            cpp_compiler: cl
+          - os: ubuntu-latest
+            c_compiler: gcc
+            cpp_compiler: g++
+          - os: ubuntu-latest
+            c_compiler: clang
+            cpp_compiler: clang++
+        exclude:
+          - os: windows-latest
+            c_compiler: gcc
+          - os: windows-latest
+            c_compiler: clang
+          - os: ubuntu-latest
+            c_compiler: cl
 
     steps:
     - uses: actions/checkout@v4
@@ -21,27 +46,40 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/" >> "$GITHUB_OUTPUT"
 
-    - name: Install dependencies on Ubuntu
+    - name: Install GTK on Ubuntu
+      if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt update
         sudo apt install -y libgtk-3-dev libwebkit2gtk-4.0-dev
-        sudo apt-get install libjson-c-dev libjson-glib-dev build-essential json-glib-tools
+        sudo apt-get install libjson-c-dev libjson-glib-dev build-essential libwebkit2gtk-4.0-dev libgtk-3-dev json-glib-tools
 
-    - name: Build on Ubuntu
+    - name: Install GTK on Windows
+      if: matrix.os == 'windows-latest'
       run: |
-        g++ -o AlphaSurf src/*.cpp `pkg-config --cflags --libs gtk+-3.0 webkit2gtk-4.0 json-glib-1.0`
+        echo "Installing vcpkg"
+        git clone https://github.com/microsoft/vcpkg.git
+        cd vcpkg
+        git checkout 2023.06
+        ./bootstrap-vcpkg.bat
+        ./vcpkg integrate install
+        ./vcpkg install gtk
+        ./vcpkg install webkitgtk
+
+    - name: Build
+      run: g++ -o AlphaSurf src/*.cpp `pkg-config --cflags --libs gtk+-3.0 webkit2gtk-4.0 json-glib-1.0`
+
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      run: ctest --build-config Release
+      run: ctest --build-config ${{ matrix.build_type }}
 
     - name: Create Release
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       id: create_release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: "v2.1.7"
-        release_name: "AlphaSurf Release 2.1.7"
+        tag_name: "v2.1.7"  # Adjust the versioning as needed
+        release_name: "AlphaSurf Release"
         draft: false
         prerelease: false
       env:
@@ -51,8 +89,9 @@ jobs:
       if: steps.create_release.outputs.id
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: "v2.1.7"
+        tag_name: "v2.1.7"  # Same as above
         files: |
           ${{ steps.strings.outputs.build-output-dir }}/AlphaSurf
+          ${{ steps.strings.outputs.build-output-dir }}/*.exe  # If you're building .exe files on Windows
       env:
         GITHUB_TOKEN: ${{ secrets.TOKEN }}
