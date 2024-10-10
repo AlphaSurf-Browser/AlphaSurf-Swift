@@ -50,6 +50,7 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt update
+        sudo apt-get install libjsoncpp-dev
         sudo apt-get install libjson-c-dev libjson-glib-dev build-essential json-glib-tools
 
     - name: Build on Ubuntu
