@@ -57,8 +57,8 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: |
         echo "Installing MSYS2"
-        curl -L -o msys2.exe https://repo.msys2.org/distrib/x86_64/msys2-x86_64-latest.exe
-        start msys2.exe -ExecutionPolicy Bypass -Wait
+        Invoke-WebRequest -Uri https://repo.msys2.org/distrib/x86_64/msys2-x86_64-latest.exe -OutFile msys2.exe
+        Start-Process msys2.exe -Wait
         C:\msys64\usr\bin\bash -lc "pacman -Syu --noconfirm"
         C:\msys64\usr\bin\bash -lc "pacman -S --noconfirm mingw-w64-x86_64-toolchain mingw-w64-x86_64-gtk3 mingw-w64-x86_64-webkitgtk"
 
@@ -81,7 +81,7 @@ jobs:
       id: create_release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: "v2.1.4"  # Adjusted version
+        tag_name: "v2.1.5"  # Adjusted version
         release_name: "AlphaSurf Release"
         draft: false
         prerelease: false
@@ -92,7 +92,7 @@ jobs:
       if: steps.create_release.outputs.id
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: "v2.1.4"
+        tag_name: "v2.1.5"
         files: |
           ${{ steps.strings.outputs.build-output-dir }}/AlphaSurf
           ${{ steps.strings.outputs.build-output-dir }}/AlphaSurf.exe  # For Windows builds
