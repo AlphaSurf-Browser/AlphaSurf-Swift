@@ -1,153 +1,282 @@
 #include <gtk/gtk.h>
 #include <webkit2/webkit2.h>
-#include <json-glib/json-glib.h>
-#include <iostream>
-#include <fstream>
 #include <vector>
 #include <string>
-#include <algorithm>
+#include <fstream>
+#include <iostream>
 
-struct Bookmark {
-    std::string title;
-    std::string url;
+const char* START_PAGE_HTML = R"(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to AlphaSurf</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            color: #333;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #007acc;
+        }
+        input[type="text"] {
+            width: 60%;
+            padding: 10px;
+            margin: 20px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #search-button {
+            padding: 10px 15px;
+            background-color: #007acc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #search-button:hover {
+            background-color: #005f99;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to AlphaSurf</h1>
+    <input type="text" id="search-query" placeholder="Search...">
+    <button id="search-button">Search</button>
+    <p>Current time: <span id="clock"></span></p>
+    <script>
+        document.getElementById('search-button').onclick = function() {
+            const query = document.getElementById('search-query').value;
+            if (query) {
+                window.location.href = 'alpha://search?q=' + encodeURIComponent(query);
+            }
+        };
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').textContent = now.toLocaleTimeString();
+        }
+        setInterval(updateClock, 1000);
+        updateClock(); // Initial call
+    </script>
+</body>
+</html>
+)";
+
+const char* SETTINGS_PAGE_HTML = R"(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - AlphaSurf</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            color: #333;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #007acc;
+        }
+        label {
+            display: block;
+            margin: 10px 0;
+        }
+        input[type="text"], input[type="checkbox"] {
+            margin: 5px 0;
+        }
+        input[type="submit"] {
+            padding: 10px 15px;
+            background-color: #007acc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        input[type="submit"]:hover {
+            background-color: #005f99;
+        }
+    </style>
+</head>
+<body>
+    <h1>Settings</h1>
+    <form id="settings-form">
+        <label for="homepage">Set Homepage:</label>
+        <input type="text" id="homepage" placeholder="Enter URL">
+        <label for="search-engine">Search Engine URL:</label>
+        <input type="text" id="search-engine" placeholder="Enter search engine URL">
+        <input type="submit" value="Save Settings">
+    </form>
+    <script>
+        const form = document.getElementById('settings-form');
+        form.onsubmit = function(event) {
+            event.preventDefault();
+            const homepage = document.getElementById('homepage').value;
+            const searchEngine = document.getElementById('search-engine').value;
+            window.localStorage.setItem('homepage', homepage);
+            window.localStorage.setItem('searchEngine', searchEngine);
+            alert('Settings saved!');
+        };
+
+        // Load existing settings
+        document.getElementById('homepage').value = window.localStorage.getItem('homepage') || '';
+        document.getElementById('search-engine').value = window.localStorage.getItem('searchEngine') || '';
+    </script>
+</body>
+</html>
+)";
+
+struct Tab {
+    WebKitWebView* web_view;
+    GtkWidget* label;
 };
 
-std::vector<Bookmark> bookmarks;
-std::vector<std::string> history;
-GtkWidget *main_window;
-GtkNotebook *notebook;
+std::vector<Tab> tabs;
 
-void load_bookmarks() {
-    try {
-        std::ifstream file("bookmarks.json");
-        if (file) {
-            JsonParser *parser = json_parser_new();
-            json_parser_load_from_file(parser, "bookmarks.json", NULL);
-            JsonNode *root = json_parser_get_root(parser);
-            if (root) {
-                JsonArray *array = json_node_get_array(root);
-                for (guint i = 0; i < json_array_get_length(array); i++) {
-                    JsonNode *node = json_array_get_element(array, i);
-                    JsonObject *object = json_node_get_object(node);
-                    Bookmark bookmark;
-                    bookmark.title = json_object_get_string_member(object, "title");
-                    bookmark.url = json_object_get_string_member(object, "url");
-                    bookmarks.push_back(bookmark);
-                }
+std::string load_search_engine() {
+    std::ifstream infile("settings.txt");
+    std::string search_engine;
+    if (infile.good()) {
+        std::getline(infile, search_engine);
+    }
+    return search_engine.empty() ? "https://duckduckgo.com/?q=%s" : search_engine; // Default to DuckDuckGo
+}
+
+void save_settings(const std::string& homepage, const std::string& search_engine) {
+    std::ofstream outfile("settings.txt");
+    if (outfile.is_open()) {
+        outfile << homepage << "\n" << search_engine << std::endl;
+    }
+}
+
+void load_url(WebKitWebView* web_view, const gchar* url) {
+    webkit_web_view_load_uri(web_view, url);
+}
+
+void load_html(WebKitWebView* web_view, const char* html) {
+    webkit_web_view_load_html(web_view, html, nullptr);
+}
+
+void open_alpha_start(WebKitWebView* web_view) {
+    load_html(web_view, START_PAGE_HTML);
+}
+
+void on_refresh_button_clicked(WebKitWebView* web_view) {
+    const gchar* uri = webkit_web_view_get_uri(web_view);
+    if (uri) {
+        webkit_web_view_reload(web_view);
+    } else {
+        open_alpha_start(web_view);
+    }
+}
+
+void on_home_button_clicked(WebKitWebView* web_view) {
+    open_alpha_start(web_view);
+}
+
+void on_settings_button_clicked(GtkNotebook* notebook) {
+    WebKitWebView* settings_web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
+    load_html(settings_web_view, SETTINGS_PAGE_HTML);
+    
+    GtkWidget* settings_tab_label = gtk_label_new("Settings");
+    gtk_notebook_append_page(notebook, GTK_WIDGET(settings_web_view), settings_tab_label);
+    gtk_notebook_set_current_page(notebook, gtk_notebook_get_n_pages(notebook) - 1);
+}
+
+void on_new_tab_button_clicked(GtkNotebook* notebook) {
+    WebKitWebView* new_web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
+    open_alpha_start(new_web_view);  // Load start page in new tab
+
+    GtkWidget* tab_label = gtk_label_new("New Tab");
+    gtk_notebook_append_page(notebook, GTK_WIDGET(new_web_view), tab_label);
+    gtk_notebook_set_current_page(notebook, gtk_notebook_get_n_pages(notebook) - 1);
+    
+    // Connect the "destroy" signal to clean up the web view
+    g_signal_connect(new_web_view, "destroy", G_CALLBACK(gtk_widget_destroy), NULL);
+}
+
+void perform_search(WebKitWebView* web_view, const gchar* query) {
+    std::string search_engine = load_search_engine();
+    std::string search_url = search_engine;
+    size_t pos = search_url.find("%s");
+    if (pos != std::string::npos) {
+        search_url.replace(pos, 2, query);
+    }
+    load_url(web_view, search_url.c_str());
+}
+
+void on_uri_requested(WebKitWebView* web_view, const gchar* uri) {
+    if (g_str_has_prefix(uri, "alpha://")) {
+        if (g_strcmp0(uri, "alpha://start") == 0) {
+            open_alpha_start(web_view);
+        } else if (g_strcmp0(uri, "alpha://settings") == 0) {
+            on_settings_button_clicked(GTK_NOTEBOOK(gtk_widget_get_parent(GTK_WIDGET(web_view))));
+        } else if (g_strcmp0(uri, "alpha://search") == 0) {
+            const gchar* query = g_strrstr(uri, "q=");
+            if (query) {
+                query += 2;  // Skip "q="
+                perform_search(web_view, query);
             }
-            g_object_unref(parser);
+        } else {
+            load_url(web_view, uri); // For any other alpha:// URL, treat it as a regular web request
         }
-    } catch (const std::exception& e) {
-        std::cerr << "Error loading bookmarks: " << e.what() << std::endl;
+    } else {
+        load_url(web_view, uri); // Treat as a standard URL for non-alpha schemas
     }
 }
 
-void save_bookmarks() {
-    try {
-        JsonGenerator *generator = json_generator_new();
-        JsonNode *root = json_node_alloc();
-        json_node_init_array(root);
-        for (const Bookmark &bookmark : bookmarks) {
-            JsonNode *node = json_node_alloc();
-            json_node_init_object(node);
-            json_object_set_string_member(json_node_get_object(node), "title", bookmark.title.c_str());
-            json_object_set_string_member(json_node_get_object(node), "url", bookmark.url.c_str());
-            json_array_add_element(json_node_get_array(root), node);
-        }
-        std::ofstream file("bookmarks.json");
-        json_generator_set_root(generator, root);
-        json_generator_to_file(generator, "bookmarks.json", NULL);
-        g_object_unref(generator);
-        g_object_unref(root);
-    } catch (const std::exception& e) {
-        std::cerr << "Error saving bookmarks: " << e.what() << std::endl;
-    }
+GtkWidget* create_toolbar(GtkNotebook* notebook) {
+    GtkWidget* toolbar = gtk_toolbar_new();
+
+    GtkToolItem* refresh_button = gtk_tool_button_new(NULL, "Refresh");
+    g_signal_connect(refresh_button, "clicked", G_CALLBACK(on_refresh_button_clicked), nullptr);
+    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), refresh_button, -1);
+
+    GtkToolItem* home_button = gtk_tool_button_new(NULL, "Home");
+    g_signal_connect(home_button, "clicked", G_CALLBACK(on_home_button_clicked), nullptr);
+    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), home_button, -1);
+
+    GtkToolItem* settings_button = gtk_tool_button_new(NULL, "Settings");
+    g_signal_connect(settings_button, "clicked", G_CALLBACK(on_settings_button_clicked), notebook);
+    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), settings_button, -1);
+
+    GtkToolItem* new_tab_button = gtk_tool_button_new(NULL, "New Tab");
+    g_signal_connect(new_tab_button, "clicked", G_CALLBACK(on_new_tab_button_clicked), notebook);
+    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), new_tab_button, -1);
+
+    return toolbar;
 }
 
-void add_bookmark(GtkWidget *widget, gpointer data) {
-    GtkWidget *dialog = gtk_dialog_new_with_buttons("Add Bookmark", GTK_WINDOW(main_window), GTK_DIALOG_MODAL, GTK_STOCK_OK, GTK_RESPONSE_ACCEPT, GTK_STOCK_CANCEL, GTK_RESPONSE_REJECT, NULL);
-    GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    GtkWidget *grid = gtk_grid_new();
-    gtk_grid_set_column_homogeneous(GTK_GRID(grid), TRUE);
-    gtk_grid_set_row_homogeneous(GTK_GRID(grid), TRUE);
-    gtk_container_add (GTK_CONTAINER(content), grid);
-    GtkWidget *title_label = gtk_label_new("Title:");
-    gtk_grid_attach(GTK_GRID(grid), title_label, 0, 0, 1, 1);
-    GtkWidget *title_entry = gtk_entry_new();
-    gtk_grid_attach(GTK_GRID(grid), title_entry, 1, 0, 1, 1);
-    GtkWidget *url_label = gtk_label_new("URL:");
-    gtk_grid_attach(GTK_GRID(grid), url_label, 0, 1, 1, 1);
-    GtkWidget *url_entry = gtk_entry_new();
-    gtk_grid_attach(GTK_GRID(grid), url_entry, 1, 1, 1, 1);
-    gtk_widget_show_all(dialog);
-    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
-    if (response == GTK_RESPONSE_ACCEPT) {
-        Bookmark bookmark;
-        bookmark.title = gtk_entry_get_text(GTK_ENTRY(title_entry));
-        bookmark.url = gtk_entry_get_text(GTK_ENTRY(url_entry));
-        bookmarks.push_back(bookmark);
-        save_bookmarks();
-    }
-    gtk_widget_destroy(dialog);
-    g_object_unref(dialog);
-}
-
-void open_bookmark(GtkWidget *widget, gpointer data) {
-    GtkWidget *dialog = gtk_dialog_new_with_buttons("Open Bookmark", GTK_WINDOW(main_window), GTK_DIALOG_MODAL, GTK_STOCK_OK, GTK_RESPONSE_ACCEPT, GTK_STOCK_CANCEL, GTK_RESPONSE_REJECT, NULL);
-    GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    GtkWidget *grid = gtk_grid_new();
-    gtk_grid_set_column_homogeneous(GTK_GRID(grid), TRUE);
-    gtk_grid_set_row_homogeneous(GTK_GRID(grid), TRUE);
-    gtk_container_add(GTK_CONTAINER(content), grid);
-    GtkWidget *list = gtk_list_box_new();
-    gtk_grid_attach(GTK_GRID(grid), list, 0, 0, 1, 1);
-    for (const Bookmark &bookmark : bookmarks) {
-        GtkWidget *row = gtk_list_box_row_new();
-        gtk_container_add(GTK_CONTAINER(row), gtk_label_new(bookmark.title.c_str()));
-        gtk_list_box_insert(GTK_LIST_BOX(list), row, -1);
-    }
-    gtk_widget_show_all(dialog);
-    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
-    if (response == GTK_RESPONSE_ACCEPT) {
-        GtkWidget *selected_row = gtk_list_box_get_selected_row(GTK_LIST_BOX(list));
-        if (selected_row) {
-            GtkWidget *label = gtk_bin_get_child(GTK_BIN(selected_row));
-            std::string title = gtk_label_get_text(GTK_LABEL(label));
-            for (const Bookmark &bookmark : bookmarks) {
-                if (bookmark.title == title) {
-                    webkit_web_view_load_uri(WEBKIT_WEB_VIEW(notebook), bookmark.url.c_str());
-                    break;
-                }
-            }
-        }
-    }
-    gtk_widget_destroy(dialog);
-    g_object_unref(dialog);
-}
-
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     gtk_init(&argc, &argv);
-    main_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(main_window), "Alpha Browser");
-    gtk_container_set_border_width(GTK_CONTAINER(main_window), 10);
-    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_container_add(GTK_CONTAINER(main_window), vbox);
-    GtkWidget *toolbar = gtk_toolbar_new();
-    gtk_box_pack_start(GTK_BOX(vbox), toolbar, FALSE, FALSE, 0);
-    GtkWidget *add_button = gtk_tool_button_new(gtk_image_new_from_icon_name("list-add", GTK_ICON_SIZE_LARGE_TOOLBAR), "Add Bookmark");
-    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), add_button, -1);
-    g_signal_connect(add_button, "clicked", G_CALLBACK(add_bookmark), NULL);
-    GtkWidget *open_button = gtk_tool_button_new(gtk_image_new_from_icon_name("document-open", GTK_ICON_SIZE_LARGE_TOOLBAR), "Open Bookmark");
-    gtk_toolbar_insert(GTK_TOOLBAR(toolbar), open_button, -1);
-    g_signal_connect(open_button, "clicked", G_CALLBACK(open_bookmark), NULL);
-    GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
-    gtk_box_pack_start(GTK_BOX(vbox), scrolled_window, TRUE, TRUE, 0);
-    notebook = GTK_NOTEBOOK(gtk_notebook_new());
-    gtk_container_add(GTK_CONTAINER(scrolled_window), GTK_WIDGET(notebook));
-    GtkWidget *web_view = webkit_web_view_new    ();
-    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), web_view, gtk_label_new("New Tab"));
-    load_bookmarks();
-    gtk_widget_show_all(main_window);
+    
+    GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(window), "AlphaSurf");
+    gtk_window_set_default_size(GTK_WINDOW(window), 1200, 800);
+    
+    GtkWidget* notebook = gtk_notebook_new();
+    gtk_container_add(GTK_CONTAINER(window), notebook);
+    
+    GtkWidget* toolbar = create_toolbar(GTK_NOTEBOOK(notebook));
+    gtk_box_pack_start(GTK_BOX(gtk_header_bar_new()), toolbar, FALSE, FALSE, 0);
+    
+    // Initial tab
+    on_new_tab_button_clicked(GTK_NOTEBOOK(notebook));
+    
+    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    g_signal_connect(window, "destroy", G_CALLBACK(gtk_widget_destroy), NULL);
+    
+    gtk_widget_show_all(window);
     gtk_main();
+
     return 0;
 }
