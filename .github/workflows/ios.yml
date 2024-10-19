@@ -58,9 +58,9 @@ jobs:
           # Move the app into the Payload directory
           cp -r build/AlphaSurf.app build/AlphaSurf.ipa/Payload/
 
-          # Zip the IPA for distribution
+          # Create the IPA by zipping the Payload directory
           cd build
-          zip -r AlphaSurf.ipa AlphaSurf.ipa
+          zip -r AlphaSurf.ipa AlphaSurf.ipa/Payload
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
