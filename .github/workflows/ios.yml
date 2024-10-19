@@ -16,16 +16,12 @@ jobs:
 
       - name: Set up Swift
         run: |
-          # Ensure Swift is installed and print the version
           swift --version
 
       - name: Compile Swift Files
         run: |
-          # Navigate to src directory and compile Swift files
           cd src
           swiftc -o output *.swift
-          # Or if you're using SPM, uncomment the following line
-          # swift build
 
   release:
     name: Create Release
@@ -46,3 +42,4 @@ jobs:
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
+          TOKEN: $TOKEN
