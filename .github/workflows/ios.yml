@@ -38,7 +38,7 @@ jobs:
         env:  # Use env to set the TOKEN variable
           GITHUB_TOKEN: ${{ secrets.TOKEN }}  # Correct token variable name
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref_name }} # Use github.ref_name for the release name
+          tag_name: '1.0.0'
+          release_name: '1.0.0'
           draft: false
           prerelease: false
