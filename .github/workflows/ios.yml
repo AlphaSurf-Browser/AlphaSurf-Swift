@@ -67,11 +67,15 @@ jobs:
           # Rename the zip file to ipa
           mv AlphaSurf.zip AlphaSurf.ipa
 
+      - name: List Build Directory
+        run: |
+          ls -l build  # List the contents of the build directory to verify IPA creation
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
           name: build-artifacts
-          path: build/*.ipa  # This will match any IPA file in the build directory.
+          path: build/AlphaSurf.ipa  # Adjusting to the correct path for the IPA
 
   release:
     name: Create Release
@@ -97,6 +101,6 @@ jobs:
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: build/*.ipa  # This will match any IPA file in the build directory.
-          asset_name: ${{ github.run_id }}.ipa  # Generates a unique name for the uploaded IPA file
+          asset_path: build/AlphaSurf.ipa  # This will match the IPA file created
+          asset_name: AlphaSurf.ipa  # Use the correct name for the uploaded IPA file
           asset_content_type: application/octet-stream  # Content type for the IPA file
