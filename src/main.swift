@@ -1,7 +1,5 @@
-import Gtk
+import Cocoa
 import WebKit
-import GLib
-import GIO
 
 // Constants for the start page HTML
 let startPageHTML = """
@@ -96,7 +94,7 @@ let startPageHTML = """
 
         document.getElementById('search').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') {
-                const query = this.value;
+                const query = this.value.trim();
                 if (query) {
                     if (query.startsWith('http://') || query.startsWith('https://')) {
                         window.location.href = query;
@@ -107,200 +105,117 @@ let startPageHTML = """
             }
         });
 
-        // Function to load bookmarks (to be implemented)
-        function loadBookmarks() {
-            // This function will be called from C++ to populate bookmarks
-        }
-
-        // Function to add a bookmark to the start page
-        function addBookmark(url, title) {
+        // Load bookmarks from Swift
+        function loadBookmarks(bookmarks) {
             const bookmarksDiv = document.getElementById('bookmarks');
-            const bookmarkElem = document.createElement('div');
-            bookmarkElem.className = 'bookmark';
-            bookmarkElem.textContent = title || url;
-            bookmarkElem.onclick = () => window.location.href = url;
-            bookmarksDiv.appendChild(bookmarkElem);
+            bookmarks.forEach(bookmark => {
+                const bookmarkElem = document.createElement('div');
+                bookmarkElem.className = 'bookmark';
+                bookmarkElem.textContent = bookmark.title || bookmark.url;
+                bookmarkElem.onclick = () => window.location.href = bookmark.url;
+                bookmarksDiv.appendChild(bookmarkElem);
+            });
         }
     </script>
 </body>
 </html>
 """
 
-// Global variables
-var mainWindow: UnsafeMutablePointer<GtkWidget>!
-var notebook: UnsafeMutablePointer<GtkNotebook>!
-var addressBar: UnsafeMutablePointer<GtkEntry>!
-var bookmarks: [String] = []
-var history: [String] = []
-let adBlockList: Set<String> = ["example.com", "ads.com"]
+// Bookmark structure
+struct Bookmark: Codable {
+    var url: String
+    var title: String
+}
 
-// Function prototypes
-func loadSettings()
-func saveBookmarks()
-func addBookmark(url: String, title: String)
-func showBookmarks()
-func updateAddressBar(url: String)
-func getCurrentTabURL() -> String
-func createNewTab(url: String)
-func onTabSwitch(notebook: UnsafeMutablePointer<GtkNotebook>?, page: UnsafeMutablePointer<GtkWidget>?, pageNum: UInt, userData: UnsafeMutableRawPointer?)
-func onNewTabButtonClicked(widget: UnsafeMutablePointer<GtkWidget>?)
-func onBookmarksButtonClicked(widget: UnsafeMutablePointer<GtkWidget>?)
-func onSettingsButtonClicked(widget: UnsafeMutablePointer<GtkWidget>?)
-func onDevToolsButtonClicked(widget: UnsafeMutablePointer<GtkWidget>?)
-func onHistoryButtonClicked(widget: UnsafeMutablePointer<GtkWidget>?)
-func onIncognitoButtonClicked(widget: UnsafeMutablePointer<GtkWidget>?)
-func initializeUI()
+// Class to manage the browser
+class AlphaSurfBrowser: NSWindowController, WKNavigationDelegate {
+    var webView: WKWebView!
+    var bookmarks: [Bookmark] = []
 
-// Load settings and bookmarks from JSON file
-func loadSettings() {
-    do {
-        let fileUrl = URL(fileURLWithPath: "bookmarks.json")
-        let data = try Data(contentsOf: fileUrl)
-        let json = try JSONSerialization.jsonObject(with: data, options: []) as! [[String: String]]
+    override init(window: NSWindow?) {
+        super.init(window: window)
+        setupWebView()
+        loadInitialPage()
+        loadBookmarks()
+    }
+
+    // Setup WebView
+    private func setupWebView() {
+        webView = WKWebView(frame: .zero)
+        webView.navigationDelegate = self
+        window?.contentView = webView
+        window?.makeKeyAndOrderFront(nil)
+    }
+
+    // Load the initial page
+    private func loadInitialPage() {
+        webView.loadHTMLString(startPageHTML, baseURL: nil)
+    }
+
+    // Add bookmark
+    func addBookmark(url: String, title: String) {
+        let newBookmark = Bookmark(url: url, title: title)
+        bookmarks.append(newBookmark)
+        saveBookmarks()
         
-        for obj in json {
-            if let url = obj["url"], let title = obj["title"] {
-                bookmarks.append(url)
-                // Call JavaScript function to add bookmark to start page
-                let webView = WEBKIT_WEB_VIEW(gtk_notebook_get_nth_page(notebook, 0))
-                let js = "addBookmark('\(url)', '\(title)');"
-                webkit_web_view_run_javascript(webView, js, nil, nil, nil)
+        // Call JavaScript function to add bookmark to the start page
+        let js = "loadBookmarks(\(bookmarksToJSON()));"
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    // Load bookmarks from UserDefaults
+    private func loadBookmarks() {
+        if let data = UserDefaults.standard.data(forKey: "bookmarks") {
+            let decoder = JSONDecoder()
+            if let loadedBookmarks = try? decoder.decode([Bookmark].self, from: data) {
+                bookmarks = loadedBookmarks
+                let js = "loadBookmarks(\(bookmarksToJSON()));"
+                webView.evaluateJavaScript(js, completionHandler: nil)
             }
         }
-    } catch {
-        print("Failed to load bookmarks: \(error)")
-    }
-}
-
-// Save bookmarks to a JSON file
-func saveBookmarks() {
-    do {
-        let bookmarksArray = bookmarks.map { ["url": $0, "title": $0] }
-        let jsonData = try JSONSerialization.data(withJSONObject: bookmarksArray, options: .prettyPrinted)
-        try jsonData.write(to: URL(fileURLWithPath: "bookmarks.json"))
-    } catch {
-        print("Failed to save bookmarks: \(error)")
-    }
-}
-
-// Function to add a new bookmark
-func addBookmark(url: String, title: String) {
-    bookmarks.append(url)
-    saveBookmarks()
-    
-    // Add bookmark to start page
-    let webView = WEBKIT_WEB_VIEW(gtk_notebook_get_nth_page(notebook, 0))
-    let js = "addBookmark('\(url)', '\(title)');"
-    webkit_web_view_run_javascript(webView, js, nil, nil, nil)
-}
-
-// Function to show bookmarks
-func showBookmarks() {
-    let dialog = gtk_dialog_new_with_buttons("Bookmarks",
-                                             GTK_WINDOW(mainWindow),
-                                             GTK_DIALOG_MODAL,
-                                             "Close",
-                                             GTK_RESPONSE_CLOSE,
-                                             nil)
-    let contentArea = gtk_dialog_get_content_area(GTK_DIALOG(dialog))
-    let listBox = gtk_list_box_new()
-    gtk_container_add(GTK_CONTAINER(contentArea), listBox)
-
-    for bookmark in bookmarks {
-        let label = gtk_label_new(bookmark)
-        gtk_list_box_insert(GTK_LIST_BOX(listBox), label, -1)
     }
 
-    gtk_widget_show_all(dialog)
-    gtk_dialog_run(GTK_DIALOG(dialog))
-    gtk_widget_destroy(dialog)
-}
-
-// Function to update the address bar
-func updateAddressBar(url: String) {
-    if gtk_is_entry(addressBar) {
-        gtk_entry_set_text(addressBar, url)
-    }
-}
-
-// Function to retrieve the current tab URL
-func getCurrentTabURL() -> String {
-    let currentPage = gtk_notebook_get_nth_page(notebook, gtk_notebook_get_current_page(notebook))
-    if let currentPage = currentPage {
-        let webView = WEBKIT_WEB_VIEW(currentPage)
-        return String(cString: webkit_web_view_get_uri(webView))
-    }
-    return ""
-}
-
-// Function to create a new tab
-func createNewTab(url: String) {
-    let webView = webkit_web_view_new()
-    
-    if url == "alpha://start" {
-        webkit_web_view_load_html(WEBKIT_WEB_VIEW(webView), startPageHTML, nil)
-    } else {
-        // Check for ad blocking
-        for adDomain in adBlockList {
-            if url.contains(adDomain) {
-                print("Blocked ad URL: \(url)")
-                return // Don't load the ad URL
-            }
+    // Save bookmarks to UserDefaults
+    private func saveBookmarks() {
+        let encoder = JSONEncoder()
+        if let data = try? encoder.encode(bookmarks) {
+            UserDefaults.standard.set(data, forKey: "bookmarks")
         }
-        webkit_web_view_load_uri(WEBKIT_WEB_VIEW(webView), url)
     }
-    
-    gtk_notebook_append_page(notebook, webView, gtk_label_new(url))
-    gtk_notebook_set_current_page(notebook, gtk_notebook_get_n_pages(notebook) - 1)
-    gtk_widget_show(webView)
+
+    // Convert bookmarks to JSON format for JavaScript
+    private func bookmarksToJSON() -> String {
+        let jsonEncoder = JSONEncoder()
+        if let jsonData = try? jsonEncoder.encode(bookmarks),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            return jsonString
+        }
+        return "[]"
+    }
+
+    // WKNavigationDelegate method
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // Handle page load completion
+    }
 }
 
-// Function to handle tab switching
-func onTabSwitch(notebook: UnsafeMutablePointer<GtkNotebook>?, page: UnsafeMutablePointer<GtkWidget>?, pageNum: UInt, userData: UnsafeMutableRawPointer?) {
-    updateAddressBar(getCurrentTabURL())
+// Main entry point
+@main
+struct AlphaSurfApp {
+    static func main() {
+        let app = NSApplication.shared
+        let window = NSWindow(contentRect: NSMakeRect(0, 0, 800, 600),
+                              styleMask: [.titled, .closable, .resizable],
+                              backing: .buffered,
+                              defer: false)
+        window.title = "AlphaSurf"
+        
+        let browser = AlphaSurfBrowser(window: window)
+        
+        // Add example bookmarks for testing
+        browser.addBookmark(url: "https://www.apple.com", title: "Apple")
+        browser.addBookmark(url: "https://www.google.com", title: "Google")
+        
+        app.run()
+    }
 }
-
-// Function to handle new tab button click
-func onNewTabButtonClicked(widget: UnsafeMutablePointer<GtkWidget>?) {
-    createNewTab(url: "alpha://start")
-}
-
-// Function to handle bookmarks button click
-func onBookmarksButtonClicked(widget: UnsafeMutablePointer<GtkWidget>?) {
-    showBookmarks()
-}
-
-// Initialize the UI
-func initializeUI() {
-    gtk_init(nil, nil)
-    
-    // Main window setup
-    mainWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL)
-    gtk_window_set_title(GTK_WINDOW(mainWindow), "AlphaSurf")
-    gtk_window_set_default_size(GTK_WINDOW(mainWindow), 800, 600)
-    
-    // Notebook setup
-    notebook = gtk_notebook_new()
-    gtk_container_add(GTK_CONTAINER(mainWindow), notebook)
-    
-    // Create the first tab with the start page
-    createNewTab(url: "alpha://start")
-    
-    // Connect signal for tab switching
-    g_signal_connect(notebook, "switch-page", unsafeBitCast(onTabSwitch as AnyObject, to: GCallback.self), nil)
-    
-    // Connect signal for window destroy
-    g_signal_connect(mainWindow, "destroy", gtk_main_quit, nil)
-    
-    // Show all widgets
-    gtk_widget_show_all(mainWindow)
-    gtk_main()
-}
-
-// Main function to start the application
-func main() {
-    loadSettings()
-    initializeUI()
-}
-
-main()
