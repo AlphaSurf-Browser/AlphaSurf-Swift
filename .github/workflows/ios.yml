@@ -52,15 +52,20 @@ jobs:
 
       - name: Create IPA
         run: |
-          # Create a new directory for the IPA package
+          # Create the Payload directory
           mkdir -p build/AlphaSurf.ipa/Payload
 
-          # Move the app into the Payload directory
+          # Move the .app into the Payload directory
           cp -r build/AlphaSurf.app build/AlphaSurf.ipa/Payload/
 
-          # Create the IPA by zipping the Payload directory
+          # Change to the build directory
           cd build
-          zip -r AlphaSurf.ipa AlphaSurf.ipa/Payload
+
+          # Create the zip file from the Payload directory
+          zip -r AlphaSurf.zip AlphaSurf.ipa/Payload
+
+          # Rename the zip file to ipa
+          mv AlphaSurf.zip AlphaSurf.ipa
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
