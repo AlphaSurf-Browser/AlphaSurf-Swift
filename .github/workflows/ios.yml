@@ -20,14 +20,14 @@ jobs:
 
       - name: Compile Swift Files
         run: |
-          # Create the necessary directory structure for the IPA
-          mkdir -p build/AlphaSurf.app
+          # Create the necessary directory structure for the app
+          mkdir -p build/AlphaSurf.app/Contents/MacOS
 
           # Compile main.swift to output as an app
-          swiftc -o build/AlphaSurf.app/AlphaSurf src/main.swift
+          swiftc -o build/AlphaSurf.app/Contents/MacOS/AlphaSurf src/main.swift
 
-          # Create the Info.plist for the IPA
-          cat <<EOF > build/AlphaSurf.app/Info.plist
+          # Create the Info.plist for the app
+          cat <<EOF > build/AlphaSurf.app/Contents/Info.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -42,18 +42,29 @@ jobs:
               <string>1.0</string>
               <key>CFBundleShortVersionString</key>
               <string>1.0</string>
+              <key>MinimumOSVersion</key>
+              <string>15.0</string> <!-- Minimum iOS version -->
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
           </dict>
           </plist>
           EOF
 
-          # Create the IPA file
-          xcrun -sdk iphoneos PackageApplication -v "build/AlphaSurf.app" -o "build/AlphaSurf.ipa"
+      - name: Create IPA
+        run: |
+          # Create the IPA from the built app
+          mkdir -p build/AlphaSurf.ipa
+          cp -r build/AlphaSurf.app build/AlphaSurf.ipa/
+
+          # Zip the IPA for distribution
+          cd build
+          zip -r AlphaSurf.ipa AlphaSurf.ipa
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
           name: build-artifacts
-          path: ./build/*.ipa # This will match any IPA file in the build directory.
+          path: build/*.ipa  # This will match any IPA file in the build directory.
 
   release:
     name: Create Release
@@ -79,6 +90,6 @@ jobs:
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build/*.ipa  # This will match any IPA file in the build directory.
+          asset_path: build/*.ipa  # This will match any IPA file in the build directory.
           asset_name: ${{ github.run_id }}.ipa  # Generates a unique name for the uploaded IPA file
           asset_content_type: application/octet-stream  # Content type for the IPA file
