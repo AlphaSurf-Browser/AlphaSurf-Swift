@@ -23,6 +23,19 @@ jobs:
           cd src
           swiftc -o output *.swift
 
+      - name: Create IPA
+        run: |
+          # Replace `YourAppName` with the actual name of your app.
+          xcodebuild -archive src/YourAppName.xcarchive -exportOptionsPlist exportOptions.plist -exportPath ./build
+          # This command assumes you have an archive target defined.
+          # Adjust as needed based on your project structure.
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: ./build/*.ipa # This will match any IPA file in the build directory.
+
   release:
     name: Create Release
     needs: build
@@ -35,10 +48,18 @@ jobs:
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
-        env:  # Use env to set the TOKEN variable
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}  # Correct token variable name
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}  # Use the correct secret token
         with:
-          tag_name: '1.0.0'
-          release_name: '1.0.0'
+          tag_name: '2.0.0'  # Fixed version tag
+          release_name: Release 2.0.0
           draft: false
           prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./build/*.ipa  # This will match any IPA file in the build directory.
+          asset_name: ${{ github.run_id }}.ipa  # Generates a unique name for the uploaded IPA file
+          asset_content_type: application/octet-stream  # Content type for the IPA file
