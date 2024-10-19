@@ -35,9 +35,10 @@ jobs:
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
+        env:  # Use env to set the TOKEN variable
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}  # Correct token variable name
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref_name }} # Use github.ref_name for the release name
           draft: false
           prerelease: false
-          token: ${{ secrets.TOKEN }} # Pass the token here directly
