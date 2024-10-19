@@ -1,6 +1,5 @@
 import SwiftUI
 import WebKit
-import SafariServices
 
 struct ContentView: View {
     @StateObject private var viewModel = BrowserViewModel()
@@ -13,7 +12,6 @@ struct ContentView: View {
                         viewModel.loadPage()
                     })
                     .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .autocapitalization(.none)
                     .disableAutocorrection(true)
                     
                     Button(action: viewModel.loadPage) {
@@ -49,10 +47,16 @@ struct ContentView: View {
                 }
                 .padding()
             }
-            .navigationBarTitle("AlphaSurf", displayMode: .inline)
-            .navigationBarItems(trailing: Button(action: viewModel.showSettings) {
-                Image(systemName: "gear")
-            })
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("AlphaSurf").font(.headline)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: viewModel.showSettings) {
+                        Image(systemName: "gear")
+                    }
+                }
+            }
         }
         .sheet(isPresented: $viewModel.isShowingBookmarks) {
             BookmarksView(bookmarks: $viewModel.bookmarks, onSelectBookmark: { url in
@@ -72,11 +76,11 @@ struct ContentView: View {
     }
 }
 
-struct BrowserWebView: UIViewRepresentable {
+struct BrowserWebView: NSViewRepresentable {
     let url: URL?
     @ObservedObject var viewModel: BrowserViewModel
     
-    func makeUIView(context: Context) -> WKWebView {
+    func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.userContentController.add(context.coordinator, name: "bookmarkHandler")
         
@@ -85,9 +89,9 @@ struct BrowserWebView: UIViewRepresentable {
         return webView
     }
     
-    func updateUIView(_ uiView: WKWebView, context: Context) {
+    func updateNSView(_ nsView: WKWebView, context: Context) {
         if let url = url {
-            uiView.load(URLRequest(url: url))
+            nsView.load(URLRequest(url: url))
         }
     }
     
@@ -209,7 +213,11 @@ struct BookmarksView: View {
                     Text(bookmark)
                 }
             }
-            .navigationBarTitle("Bookmarks")
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Bookmarks").font(.headline)
+                }
+            }
         }
     }
 }
@@ -229,7 +237,11 @@ struct HistoryView: View {
                     Text(item)
                 }
             }
-            .navigationBarTitle("History")
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("History").font(.headline)
+                }
+            }
         }
     }
 }
@@ -246,13 +258,16 @@ struct SettingsView: View {
                 
                 Section(header: Text("Safari Extensions")) {
                     Button("Manage Safari Extensions") {
-                        if let url = URL(string: UIApplication.openSettingsURLString) {
-                            UIApplication.shared.open(url)
-                        }
+                        let url = URL(fileURLWithPath: "/Applications/Safari.app") // You can modify this path as necessary.
+                        NSWorkspace.shared.open(url)
                     }
                 }
             }
-            .navigationBarTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Settings").font(.headline)
+                }
+            }
         }
     }
 }
