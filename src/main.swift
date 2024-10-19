@@ -139,6 +139,13 @@ class AlphaSurfBrowser: NSWindowController, WKNavigationDelegate {
         loadBookmarks()
     }
 
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupWebView()
+        loadInitialPage()
+        loadBookmarks()
+    }
+
     // Setup WebView
     private func setupWebView() {
         webView = WKWebView(frame: .zero)
@@ -200,22 +207,29 @@ class AlphaSurfBrowser: NSWindowController, WKNavigationDelegate {
 }
 
 // Main entry point
-@main
-struct AlphaSurfApp {
-    static func main() {
-        let app = NSApplication.shared
-        let window = NSWindow(contentRect: NSMakeRect(0, 0, 800, 600),
-                              styleMask: [.titled, .closable, .resizable],
-                              backing: .buffered,
-                              defer: false)
+class AppDelegate: NSObject, NSApplicationDelegate {
+    var window: NSWindow!
+    var browser: AlphaSurfBrowser!
+
+    func applicationDidFinishLaunching(_ aNotification: Notification) {
+        // Create and configure the window
+        window = NSWindow(contentRect: NSMakeRect(0, 0, 800, 600),
+                          styleMask: [.titled, .closable, .resizable],
+                          backing: .buffered,
+                          defer: false)
         window.title = "AlphaSurf"
         
-        let browser = AlphaSurfBrowser(window: window)
+        // Initialize the browser
+        browser = AlphaSurfBrowser(window: window)
         
         // Add example bookmarks for testing
         browser.addBookmark(url: "https://www.apple.com", title: "Apple")
         browser.addBookmark(url: "https://www.google.com", title: "Google")
-        
-        app.run()
     }
 }
+
+// Start the application
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+app.run()
