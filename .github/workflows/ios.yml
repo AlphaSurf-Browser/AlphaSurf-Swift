@@ -52,9 +52,11 @@ jobs:
 
       - name: Create IPA
         run: |
-          # Create the IPA from the built app
-          mkdir -p build/AlphaSurf.ipa
-          cp -r build/AlphaSurf.app build/AlphaSurf.ipa/
+          # Create a new directory for the IPA package
+          mkdir -p build/AlphaSurf.ipa/Payload
+
+          # Move the app into the Payload directory
+          cp -r build/AlphaSurf.app build/AlphaSurf.ipa/Payload/
 
           # Zip the IPA for distribution
           cd build
