@@ -26,7 +26,7 @@ struct ContentView: View {
                             .tag(index)
                     }
                 }
-                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                .tabViewStyle(DefaultTabViewStyle()) // Use DefaultTabViewStyle for macOS
                 
                 HStack {
                     Button(action: viewModel.addNewTab) {
@@ -51,7 +51,7 @@ struct ContentView: View {
                 ToolbarItem(placement: .principal) {
                     Text("AlphaSurf").font(.headline)
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .automatic) { // Use .automatic for macOS toolbar placement
                     Button(action: viewModel.showSettings) {
                         Image(systemName: "gear")
                     }
@@ -272,7 +272,7 @@ struct SettingsView: View {
     }
 }
 
-@main
+// Remove the @main attribute and create an App struct
 struct AlphaSurfApp: App {
     var body: some Scene {
         WindowGroup {
